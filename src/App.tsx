@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mascot } from './components/Mascot';
 import { SpeechBubble } from './components/SpeechBubble';
 import { InputPanel } from './components/InputPanel';
 import { ResponseView } from './components/ResponseView';
+import { AttachmentChip } from './components/AttachmentChip';
 import { useConversation } from './state/conversation';
 import { streamClaude } from './services/claude';
+import { invoke, on, off } from './services/ipc';
 import type { SpriteState } from './services/sprite-animator';
 import './App.css';
 
@@ -13,8 +15,20 @@ export default function App() {
   const [continueCounter, setContinueCounter] = useState(0);
   const conv = useConversation();
 
-  const wake = () => { if (state === 'sleeping') setState('waking'); };
+  const wake = async () => {
+    if (state !== 'sleeping') return;
+    setState('waking');
+    const data = await invoke('clipboard:read');
+    if (data) conv.addAttachment(data);
+  };
   const sleep = () => { setState('sleeping'); conv.reset(); setContinueCounter(0); };
+
+  useEffect(() => {
+    const handler = () => wake();
+    on('hotkey:activate', handler);
+    return () => off('hotkey:activate');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   const lastAssistant = [...conv.messages].reverse().find(m => m.role === 'assistant');
   const showResponse = !!lastAssistant && continueCounter === 0;
@@ -59,7 +73,7 @@ export default function App() {
       gap: 8, padding: 16,
     }}>
       {state !== 'sleeping' && (
-        <SpeechBubble title={lastAssistant ? undefined : 'como posso ajudar?'}>
+        <SpeechBubble title={lastAssistant ? undefined : 'como posso ajudar?'} onClose={sleep}>
           {showResponse && lastAssistant && (
             <ResponseView
               text={lastAssistant.content}
@@ -68,12 +82,28 @@ export default function App() {
               onContinue={() => setContinueCounter(c => c + 1)}
             />
           )}
+          {showInput && conv.attachments.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              {conv.attachments.map((a, i) => (
+                <AttachmentChip key={i} attachment={a} onRemove={() => conv.removeAttachment(i)} />
+              ))}
+            </div>
+          )}
           {showInput && (
             <InputPanel
               onSubmit={handleSubmit}
-              onCapture={() => {}}
-              onClipboard={() => {}}
-              onSelectionAttach={() => {}}
+              onCapture={async () => {
+                const result = await invoke('capture:screen-region');
+                if (result) conv.addAttachment({ kind: 'image', mimeType: result.mimeType, base64: result.base64 });
+              }}
+              onClipboard={async () => {
+                const data = await invoke('clipboard:read');
+                if (data) conv.addAttachment(data);
+              }}
+              onSelectionAttach={async () => {
+                const data = await invoke('clipboard:read');
+                if (data?.kind === 'text') conv.addAttachment(data);
+              }}
               disabled={conv.status === 'thinking' || conv.status === 'talking'}
             />
           )}

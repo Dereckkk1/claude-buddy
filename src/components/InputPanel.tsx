@@ -1,5 +1,9 @@
 import { useState } from 'react';
 
+// STT desligado: Web Speech API não funciona no Electron (falta a chave Google).
+// Reativar requer trocar a impl (Whisper local WASM ou OpenAI Whisper API).
+const STT_ENABLED = false;
+
 interface Props {
   onSubmit: (text: string) => void;
   onCapture: () => void;
@@ -28,6 +32,7 @@ export function InputPanel({ onSubmit, onCapture, onClipboard, onSelectionAttach
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
           disabled={disabled}
         />
+        {STT_ENABLED && <button disabled={disabled} title="falar">🎤</button>}
         <button onClick={handleSubmit} disabled={disabled || !text.trim()}>➤</button>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>

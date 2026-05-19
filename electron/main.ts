@@ -1,8 +1,11 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 import path from 'node:path';
 import { createMascotWindow } from './window-manager';
 import { registerHandlers } from './ipc';
 import { getApiKey, setApiKey, getPosition, setPosition } from './store';
+import { captureScreenRegion } from './capture';
+import { readClipboard } from './clipboard-watcher';
+import { registerHotkeys, unregisterHotkeys } from './hotkeys';
 
 let mascotWin: BrowserWindow | null = null;
 let configWin: BrowserWindow | null = null;
@@ -40,9 +43,15 @@ function startMascot() {
     mascotWin.loadFile('dist/index.html');
   }
   mascotWin.on('closed', () => { mascotWin = null; });
+  registerHotkeys(() => mascotWin);
 }
 
 function bootstrap() {
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    const allowed = ['media', 'mediaKeySystem', 'midi', 'audioCapture'];
+    callback(allowed.includes(permission));
+  });
+
   registerHandlers({
     'config:get-api-key': () => getApiKey(),
     'config:set-api-key': (key) => {
@@ -58,6 +67,14 @@ function bootstrap() {
       return { x, y };
     },
     'window:set-position': (pos) => { mascotWin?.setPosition(pos.x, pos.y); },
+    'capture:screen-region': async () => {
+      mascotWin?.hide();
+      await new Promise((r) => setTimeout(r, 150));
+      const result = await captureScreenRegion();
+      mascotWin?.show();
+      return result;
+    },
+    'clipboard:read': () => readClipboard(),
   });
 
   if (!getApiKey()) {
@@ -72,4 +89,8 @@ app.whenReady().then(bootstrap);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+  unregisterHotkeys();
 });
