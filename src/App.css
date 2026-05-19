@@ -1,0 +1,29 @@
+* { box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; }
+
+.bubble {
+  background: #fff;
+  color: #1a1a2e;
+  border-radius: 16px;
+  padding: 12px 14px;
+  width: 320px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  position: relative;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  right: 30px;
+  width: 0; height: 0;
+  border: 10px solid transparent;
+  border-top-color: #fff;
+}
+.bubble-title {
+  color: #ff6b35;
+  font-weight: bold;
+  margin: 0 0 6px 0;
+  font-size: 14px;
+}

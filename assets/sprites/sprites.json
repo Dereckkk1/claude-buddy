@@ -1,0 +1,7 @@
+{
+  "sleeping": { "src": "placeholder.png", "frames": 4, "fps": 2, "loop": true, "nextState": null, "frameWidth": 128, "frameHeight": 128 },
+  "waking":   { "src": "placeholder.png", "frames": 8, "fps": 13, "loop": false, "nextState": "idle", "frameWidth": 128, "frameHeight": 128 },
+  "idle":     { "src": "placeholder.png", "frames": 6, "fps": 4, "loop": true, "nextState": null, "frameWidth": 128, "frameHeight": 128 },
+  "thinking": { "src": "placeholder.png", "frames": 4, "fps": 6, "loop": true, "nextState": null, "frameWidth": 128, "frameHeight": 128 },
+  "talking":  { "src": "placeholder.png", "frames": 3, "fps": 8, "loop": true, "nextState": null, "frameWidth": 128, "frameHeight": 128 }
+}
