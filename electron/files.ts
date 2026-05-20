@@ -175,6 +175,33 @@ async function readPdfFile(filePath: string, maxBytes: number): Promise<FileCont
   return { path: filePath, kind: 'text', text, bytesRead: cap, truncated };
 }
 
+const MIME_BY_EXT: Record<string, string> = {
+  png:  'image/png',
+  jpg:  'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif:  'image/gif',
+  webp: 'image/webp',
+  bmp:  'image/bmp',
+};
+
+async function readImageFile(filePath: string, maxBytes: number): Promise<FileContentImage> {
+  const stat = await fs.stat(filePath);
+  if (stat.size === 0) throw new Error('empty image');
+  if (stat.size > maxBytes) {
+    throw new Error(`image too large (${stat.size} bytes, limit ${maxBytes})`);
+  }
+  const buf = await fs.readFile(filePath);
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  return {
+    path: filePath,
+    kind: 'image',
+    base64: buf.toString('base64'),
+    mimeType: MIME_BY_EXT[ext] ?? 'application/octet-stream',
+    bytesRead: buf.length,
+    truncated: false,
+  };
+}
+
 async function readDocxFile(filePath: string, maxBytes: number): Promise<FileContentText> {
   const stat = await fs.stat(filePath);
   if (stat.size === 0) throw new Error('empty file');
@@ -219,6 +246,6 @@ export async function readFile(
   if (kind === 'text') return readTextFile(filePath, opts.maxBytes ?? LIMITS.maxBytesText);
   if (kind === 'pdf')  return readPdfFile(filePath,  opts.maxBytes ?? LIMITS.maxBytesPdf);
   if (kind === 'docx') return readDocxFile(filePath, opts.maxBytes ?? LIMITS.maxBytesDocx);
-  // image: stub filled by Task 8
+  if (kind === 'image') return readImageFile(filePath, opts.maxBytes ?? LIMITS.maxBytesImage);
   throw new Error('not implemented');
 }

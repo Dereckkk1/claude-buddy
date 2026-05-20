@@ -171,3 +171,17 @@ describe('readFile docx', () => {
     }
   });
 });
+
+describe('readFile image', () => {
+  it('returns kind=image with base64 + mimeType for a PNG', async () => {
+    const fixture = resolvePath(__dirname, 'fixtures/sample.png');
+    const out = await readFile(fixture);
+    expect(out.kind).toBe('image');
+    if (out.kind === 'image') {
+      expect(out.mimeType).toBe('image/png');
+      expect(out.base64.length).toBeGreaterThan(0);
+      // PNG signature in base64 starts with iVBORw0KGgo
+      expect(out.base64.startsWith('iVBORw0KGgo')).toBe(true);
+    }
+  });
+});
