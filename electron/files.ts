@@ -5,10 +5,11 @@ import path from 'node:path';
 import ignore, { Ignore } from 'ignore';
 
 export interface FolderEntry {
-  name: string;
+  name: string;            // path relative to the listing root (e.g. "src/index.ts")
+  absolutePath: string;    // canonical absolute path — pass this to read_file
   type: 'file' | 'folder';
-  size: number;       // bytes; 0 for folder
-  modified: number;   // ms epoch
+  size: number;            // bytes; 0 for folder
+  modified: number;        // ms epoch
 }
 
 export interface FolderListing {
@@ -109,6 +110,7 @@ export async function listFolder(
       if (!stat) continue;
       entries.push({
         name: rel,
+        absolutePath: path.resolve(full),
         type: d.isDirectory() ? 'folder' : 'file',
         size: d.isDirectory() ? 0 : stat.size,
         modified: stat.mtimeMs,
@@ -122,7 +124,7 @@ export async function listFolder(
   }
 
   const keepGoing = await walk(rootPath, '', 0);
-  return { path: rootPath, entries, truncated: !keepGoing };
+  return { path: path.resolve(rootPath), entries, truncated: !keepGoing };
 }
 
 const TEXT_EXTS = new Set([

@@ -40,11 +40,11 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'list_folder',
     description:
-      'Lista arquivos e subpastas dentro de uma pasta que o usuário anexou. Use ANTES de read_file quando precisar saber o que tem. Já filtra ruído (.git, node_modules, dist, lock files, e .gitignore se existir). Limite: 200 entradas por chamada.',
+      'Lista arquivos e subpastas dentro de uma pasta que o usuário anexou. Use ANTES de read_file quando precisar saber o que tem. Já filtra ruído (.git, node_modules, dist, lock files, e .gitignore se existir). Limite: 200 entradas por chamada.\n\nRetorno: `{ path, entries: [{ name, absolutePath, type, size, modified }] }`. CRÍTICO: quando for chamar read_file depois, passe o campo `absolutePath` (caminho completo tipo "C:\\\\Users\\\\x\\\\foo.txt"), NUNCA o `name` (que é relativo tipo "src/foo.txt"). Passar relativo vai bater no scope guard com erro "path not in attached scope".',
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Caminho absoluto da pasta. Deve estar dentro de algo que o usuário anexou.' },
+        path: { type: 'string', description: 'Caminho ABSOLUTO da pasta (tipo "C:\\\\Users\\\\x\\\\projeto"). Pega isso EXATAMENTE como aparece no bloco ATTACHED PATHS do system prompt — não modifica.' },
         recursive: { type: 'boolean', description: 'Se true, desce em subpastas até 5 níveis.' },
       },
       required: ['path'],
@@ -53,11 +53,11 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'read_file',
     description:
-      'Lê o conteúdo de um arquivo (texto/código/PDF/DOCX/imagem). Para imagens você recebe um bloco image que pode analisar diretamente. Limites: 200KB texto, 5MB PDF, 2MB DOCX, 1MB imagem — acima disso vem truncado com sufixo.',
+      'Lê o conteúdo de um arquivo (texto/código/PDF/DOCX/imagem). Para imagens você recebe um bloco image que pode analisar diretamente. Limites: 200KB texto, 5MB PDF, 2MB DOCX, 1MB imagem — acima disso vem truncado com sufixo.\n\nUSE SEMPRE caminho ABSOLUTO. Vem do `absolutePath` de cada entry retornada por list_folder, OU direto do bloco ATTACHED PATHS quando é um arquivo (não pasta) que o usuário anexou. Caminhos relativos (sem letra de drive no Windows) NÃO funcionam.',
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Caminho absoluto do arquivo. Deve estar dentro do escopo anexado.' },
+        path: { type: 'string', description: 'Caminho ABSOLUTO do arquivo (tipo "C:\\\\Users\\\\x\\\\foo.txt"). Use o `absolutePath` retornado por list_folder, ou o path direto do bloco ATTACHED PATHS.' },
       },
       required: ['path'],
     },

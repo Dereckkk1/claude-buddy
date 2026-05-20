@@ -58,6 +58,19 @@ describe('listFolder (non-recursive)', () => {
     expect(src?.type).toBe('folder');
     expect(readme?.size).toBeGreaterThan(0);
   });
+
+  it('returns absolutePath for every entry (so read_file gets a canonical path)', async () => {
+    const root = makeFixture();
+    const out = await listFolder(root);
+    for (const e of out.entries) {
+      expect(e.absolutePath).toBeDefined();
+      // Must be absolute (Windows: starts with drive letter; POSIX: starts with /)
+      expect(/^([a-zA-Z]:[\\/]|\/)/.test(e.absolutePath)).toBe(true);
+      // basename of absolutePath must match the last segment of name
+      const lastSegment = e.name.split('/').pop();
+      expect(e.absolutePath.endsWith(lastSegment!)).toBe(true);
+    }
+  });
 });
 
 describe('listFolder recursive + limits', () => {

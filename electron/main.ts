@@ -196,20 +196,28 @@ function bootstrap() {
       attachedScope = paths.map(p => resolvePath(p));
     },
     'files:list-folder': async ({ path: p, recursive }) => {
-      if (!pathIsWithin(p, attachedScope)) return { ok: false, error: `path not in attached scope: ${p}` };
+      if (!pathIsWithin(p, attachedScope)) {
+        console.warn('[files] list-folder rejected (scope):', p, 'scope:', attachedScope);
+        return { ok: false, error: `path not in attached scope: ${p}` };
+      }
       try {
         const listing = await listFolder(p, { recursive });
         return { ok: true, listing };
       } catch (e) {
+        console.error('[files] list-folder failed:', p, e);
         return { ok: false, error: e instanceof Error ? e.message : 'list failed' };
       }
     },
     'files:read-file': async ({ path: p }) => {
-      if (!pathIsWithin(p, attachedScope)) return { ok: false, error: `path not in attached scope: ${p}` };
+      if (!pathIsWithin(p, attachedScope)) {
+        console.warn('[files] read-file rejected (scope):', p, 'scope:', attachedScope);
+        return { ok: false, error: `path not in attached scope: ${p}` };
+      }
       try {
         const content = await readFileFs(p);
         return { ok: true, content };
       } catch (e) {
+        console.error('[files] read-file failed:', p, e);
         return { ok: false, error: e instanceof Error ? e.message : 'read failed' };
       }
     },
