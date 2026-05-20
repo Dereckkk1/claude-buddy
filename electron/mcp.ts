@@ -1,0 +1,431 @@
+// MCP (Model Context Protocol) client manager.
+//
+// One module owns the entire lifecycle: config CRUD (persisted in an encrypted
+// electron-store), spawning servers via @modelcontextprotocol/sdk's
+// StdioClientTransport, listing tools, routing tool calls, and emitting
+// state-change events for the UI.
+//
+// Tools are name-prefixed with the server's sanitized name to avoid conflicts
+// and to make routing deterministic (split on first underscore that yields a
+// known server name).
+
+import Store from 'electron-store';
+import { machineIdSync } from 'node-machine-id';
+import os from 'node:os';
+import { randomUUID } from 'node:crypto';
+import type {
+  MCPServerConfig,
+  MCPServerState,
+  MCPServerStatus,
+  MCPToolDef,
+  MCPCallToolResult,
+} from '../shared/mcp-types';
+
+// SDK types — imported lazily inside async functions because the package is
+// ESM and the bundler may not pre-load it. Concrete imports done via
+// `await import(...)` at call time.
+type SDKClient = {
+  connect: (transport: unknown, options?: { timeout?: number }) => Promise<void>;
+  close: () => Promise<void>;
+  listTools: () => Promise<{ tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> }>;
+  callTool: (
+    params: { name: string; arguments?: Record<string, unknown> },
+    resultSchema?: unknown,
+    options?: { timeout?: number; signal?: AbortSignal }
+  ) => Promise<{ content?: Array<{ type: string; text?: string }>; isError?: boolean }>;
+};
+
+type SDKTransport = {
+  onerror?: (err: unknown) => void;
+  onclose?: () => void;
+  close: () => Promise<void>;
+};
+
+// ─── Persistence ────────────────────────────────────────────────────────────
+
+interface MCPSchema {
+  configs?: MCPServerConfig[];
+}
+
+const encryptionKey = machineIdSync(true).slice(0, 32);
+const mcpStore = new Store<MCPSchema>({
+  name: 'claude-buddy-mcp',
+  encryptionKey,
+  defaults: { configs: [] },
+});
+
+// ─── In-memory runtime state ────────────────────────────────────────────────
+
+interface RuntimeEntry {
+  config: MCPServerConfig;
+  client?: SDKClient;
+  transport?: SDKTransport;
+  state: MCPServerState;
+  tools: MCPToolDef[];
+}
+
+const runtime = new Map<string, RuntimeEntry>();
+const stateListeners = new Set<(states: MCPServerState[]) => void>();
+
+function notifyStates(): void {
+  const states = Array.from(runtime.values()).map((e) => e.state);
+  stateListeners.forEach((cb) => cb(states));
+}
+
+export function onStatesChanged(cb: (states: MCPServerState[]) => void): () => void {
+  stateListeners.add(cb);
+  return () => { stateListeners.delete(cb); };
+}
+
+// ─── Sanitization & name parsing ────────────────────────────────────────────
+
+export function sanitizeName(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'server';
+}
+
+/**
+ * Pick the server whose prefix is the longest match against the start of
+ * `prefixedName` (avoids ambiguity when one prefix is a prefix of another,
+ * e.g. "fs" and "filesystem_read").
+ */
+export function parsePrefixedName(
+  prefixedName: string,
+  knownPrefixes: string[],
+): { serverName: string; originalName: string } | null {
+  let best: string | null = null;
+  for (const p of knownPrefixes) {
+    if (prefixedName === p + '_' + prefixedName.slice(p.length + 1) && (!best || p.length > best.length)) {
+      // sanity check: the segment after the prefix exists
+      if (prefixedName.length > p.length + 1) best = p;
+    }
+  }
+  if (!best) return null;
+  return { serverName: best, originalName: prefixedName.slice(best.length + 1) };
+}
+
+// ─── Env var expansion (${HOME}, ${USERPROFILE}) ────────────────────────────
+
+export function expandEnvVars(env: Record<string, string>): Record<string, string> {
+  const home = os.homedir();
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    out[k] = v
+      .replace(/\$\{HOME\}/g, home)
+      .replace(/\$\{USERPROFILE\}/g, home);
+  }
+  return out;
+}
+
+// ─── Config CRUD ────────────────────────────────────────────────────────────
+
+function ensureUniquePrefix(prefix: string, excludeId?: string): string {
+  const existing = listConfigs()
+    .filter((c) => c.id !== excludeId)
+    .map((c) => c.prefix);
+  if (!existing.includes(prefix)) return prefix;
+  for (let i = 2; ; i++) {
+    const candidate = `${prefix}_${i}`;
+    if (!existing.includes(candidate)) return candidate;
+  }
+}
+
+export function listConfigs(): MCPServerConfig[] {
+  return mcpStore.get('configs') ?? [];
+}
+
+export function addConfig(input: Omit<MCPServerConfig, 'id' | 'prefix'>): MCPServerConfig {
+  const id = randomUUID();
+  const prefix = ensureUniquePrefix(sanitizeName(input.name));
+  const config: MCPServerConfig = { ...input, id, prefix };
+  const configs = listConfigs();
+  configs.push(config);
+  mcpStore.set('configs', configs);
+  // Initialize runtime entry as 'stopped'
+  runtime.set(id, { config, state: stopped(id), tools: [] });
+  notifyStates();
+  return config;
+}
+
+export function updateConfig(id: string, patch: Partial<Omit<MCPServerConfig, 'id'>>): MCPServerConfig | null {
+  const configs = listConfigs();
+  const idx = configs.findIndex((c) => c.id === id);
+  if (idx === -1) return null;
+  const merged: MCPServerConfig = { ...configs[idx], ...patch, id };
+  if (patch.name) {
+    merged.prefix = ensureUniquePrefix(sanitizeName(patch.name), id);
+  }
+  configs[idx] = merged;
+  mcpStore.set('configs', configs);
+  const entry = runtime.get(id);
+  if (entry) entry.config = merged;
+  return merged;
+}
+
+export function deleteConfig(id: string): void {
+  const configs = listConfigs().filter((c) => c.id !== id);
+  mcpStore.set('configs', configs);
+  // Stop and remove runtime
+  void stopServer(id).catch(() => {});
+  runtime.delete(id);
+  notifyStates();
+}
+
+// ─── JSON import (Claude Desktop / Cursor format) ───────────────────────────
+
+interface ImportShape {
+  mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+}
+
+export function importJson(rawJson: string): { added: number; errors: string[] } {
+  const errors: string[] = [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch (e) {
+    return { added: 0, errors: [`parse error: ${e instanceof Error ? e.message : 'invalid JSON'}`] };
+  }
+  // Accept either { mcpServers: {...} } or a bare {...} as the servers map
+  const candidate = parsed as ImportShape;
+  const map = candidate.mcpServers ?? (parsed as Record<string, unknown>);
+  if (typeof map !== 'object' || map === null) {
+    return { added: 0, errors: ['expected object at root or mcpServers key'] };
+  }
+  let added = 0;
+  for (const [name, raw] of Object.entries(map as Record<string, unknown>)) {
+    if (typeof raw !== 'object' || raw === null) {
+      errors.push(`${name}: entry is not an object`);
+      continue;
+    }
+    const entry = raw as { command?: unknown; args?: unknown; env?: unknown };
+    if (typeof entry.command !== 'string' || !entry.command) {
+      errors.push(`${name}: missing or invalid command`);
+      continue;
+    }
+    const args = Array.isArray(entry.args) ? entry.args.filter((a): a is string => typeof a === 'string') : [];
+    const env: Record<string, string> = {};
+    if (entry.env && typeof entry.env === 'object') {
+      for (const [k, v] of Object.entries(entry.env as Record<string, unknown>)) {
+        if (typeof v === 'string') env[k] = v;
+      }
+    }
+    addConfig({ name, command: entry.command, args, env, enabled: true });
+    added++;
+  }
+  return { added, errors };
+}
+
+// ─── State helpers ──────────────────────────────────────────────────────────
+
+function stopped(id: string): MCPServerState {
+  return { id, status: 'stopped', toolCount: 0 };
+}
+
+function setStatus(id: string, status: MCPServerStatus, errorMessage?: string): void {
+  const entry = runtime.get(id);
+  if (!entry) return;
+  entry.state = {
+    id,
+    status,
+    toolCount: entry.tools.length,
+    errorMessage,
+    lastStartedAt: status === 'starting' || status === 'running' ? Date.now() : entry.state.lastStartedAt,
+  };
+  notifyStates();
+}
+
+export function getStates(): MCPServerState[] {
+  // Make sure every config has a runtime entry (could be missing after a fresh app launch)
+  for (const cfg of listConfigs()) {
+    if (!runtime.has(cfg.id)) {
+      runtime.set(cfg.id, { config: cfg, state: stopped(cfg.id), tools: [] });
+    }
+  }
+  return Array.from(runtime.values()).map((e) => e.state);
+}
+
+export function listAllTools(): MCPToolDef[] {
+  const all: MCPToolDef[] = [];
+  for (const entry of runtime.values()) {
+    if (entry.state.status === 'running') all.push(...entry.tools);
+  }
+  return all;
+}
+
+// ─── Lifecycle ──────────────────────────────────────────────────────────────
+
+export async function startServer(id: string): Promise<void> {
+  const entry = runtime.get(id) ?? (() => {
+    const cfg = listConfigs().find((c) => c.id === id);
+    if (!cfg) throw new Error('config not found');
+    const e: RuntimeEntry = { config: cfg, state: stopped(id), tools: [] };
+    runtime.set(id, e);
+    return e;
+  })();
+
+  if (entry.state.status === 'running' || entry.state.status === 'starting') return;
+  setStatus(id, 'starting');
+
+  try {
+    const { Client } = (await import('@modelcontextprotocol/sdk/client/index.js')) as typeof import('@modelcontextprotocol/sdk/client/index.js');
+    const { StdioClientTransport } = (await import('@modelcontextprotocol/sdk/client/stdio.js')) as typeof import('@modelcontextprotocol/sdk/client/stdio.js');
+
+    const expandedEnv = expandEnvVars(entry.config.env);
+    // Merge a sane base PATH so commands like `npx` resolve. process.env may
+    // already have it; user-provided env overrides on collision.
+    const env: Record<string, string> = {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter((p): p is [string, string] => typeof p[1] === 'string'),
+      ),
+      ...expandedEnv,
+    };
+
+    const transport = new StdioClientTransport({
+      command: entry.config.command,
+      args: entry.config.args,
+      env,
+      stderr: 'pipe',
+    }) as unknown as SDKTransport;
+
+    const client = new Client({ name: 'claude-buddy', version: '0.4.0' }) as unknown as SDKClient;
+
+    transport.onerror = (err: unknown) => {
+      const e = runtime.get(id);
+      if (!e) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      e.tools = [];
+      setStatus(id, 'crashed', msg);
+    };
+    transport.onclose = () => {
+      const e = runtime.get(id);
+      if (!e) return;
+      // Only flip to crashed if we were running; intentional stop already handled.
+      if (e.state.status === 'running' || e.state.status === 'starting') {
+        e.tools = [];
+        setStatus(id, 'crashed', 'server process exited unexpectedly');
+      }
+    };
+
+    // 10s timeout for the handshake
+    await client.connect(transport, { timeout: 10_000 });
+
+    // Discover tools
+    const listed = await client.listTools();
+    const tools: MCPToolDef[] = [];
+    const seenNames = new Set<string>();
+    for (const t of listed.tools ?? []) {
+      if (!t.name || seenNames.has(t.name)) continue;
+      seenNames.add(t.name);
+      tools.push({
+        serverId: id,
+        serverName: entry.config.prefix,
+        prefixedName: `${entry.config.prefix}_${t.name}`,
+        originalName: t.name,
+        description: t.description ?? '',
+        inputSchema: t.inputSchema ?? { type: 'object', properties: {} },
+      });
+    }
+    entry.client = client;
+    entry.transport = transport;
+    entry.tools = tools;
+    setStatus(id, 'running');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unknown spawn error';
+    entry.client = undefined;
+    entry.transport = undefined;
+    entry.tools = [];
+    setStatus(id, 'crashed', msg);
+  }
+}
+
+export async function stopServer(id: string): Promise<void> {
+  const entry = runtime.get(id);
+  if (!entry) return;
+  const wasRunning = entry.state.status === 'running' || entry.state.status === 'starting';
+  try {
+    if (entry.client) await entry.client.close().catch(() => {});
+  } catch { /* swallow */ }
+  try {
+    if (entry.transport) await entry.transport.close().catch(() => {});
+  } catch { /* swallow */ }
+  entry.client = undefined;
+  entry.transport = undefined;
+  entry.tools = [];
+  if (wasRunning) setStatus(id, 'stopped');
+}
+
+export async function restartServer(id: string): Promise<void> {
+  await stopServer(id);
+  await startServer(id);
+}
+
+export async function startAllEnabled(): Promise<void> {
+  const configs = listConfigs();
+  // Hydrate runtime for every config so the UI can show 'stopped' for disabled ones
+  for (const cfg of configs) {
+    if (!runtime.has(cfg.id)) {
+      runtime.set(cfg.id, { config: cfg, state: stopped(cfg.id), tools: [] });
+    }
+  }
+  notifyStates();
+  await Promise.all(
+    configs.filter((c) => c.enabled).map((c) => startServer(c.id).catch(() => {})),
+  );
+}
+
+export async function stopAll(): Promise<void> {
+  await Promise.all(Array.from(runtime.keys()).map((id) => stopServer(id).catch(() => {})));
+}
+
+// ─── Tool execution ─────────────────────────────────────────────────────────
+
+export async function callTool(
+  prefixedName: string,
+  input: Record<string, unknown>,
+): Promise<MCPCallToolResult> {
+  const knownPrefixes = Array.from(runtime.values())
+    .filter((e) => e.state.status === 'running')
+    .map((e) => e.config.prefix);
+  const parsed = parsePrefixedName(prefixedName, knownPrefixes);
+  if (!parsed) {
+    return { ok: false, content: '', error: `unknown MCP tool: ${prefixedName}` };
+  }
+  const entry = Array.from(runtime.values()).find((e) => e.config.prefix === parsed.serverName);
+  if (!entry || entry.state.status !== 'running' || !entry.client) {
+    return { ok: false, content: '', error: `server ${parsed.serverName} not running` };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const result = await entry.client.callTool(
+      { name: parsed.originalName, arguments: input },
+      undefined,
+      { timeout: 30_000, signal: controller.signal },
+    );
+    clearTimeout(timer);
+    return { ok: !result.isError, content: joinTextContent(result.content) };
+  } catch (e) {
+    clearTimeout(timer);
+    const msg = e instanceof Error ? e.message : 'tool call failed';
+    return { ok: false, content: '', error: msg };
+  }
+}
+
+function joinTextContent(content?: Array<{ type: string; text?: string }>): string {
+  if (!content || content.length === 0) return '';
+  const textParts: string[] = [];
+  let nonTextCount = 0;
+  for (const c of content) {
+    if (c.type === 'text' && typeof c.text === 'string') textParts.push(c.text);
+    else nonTextCount++;
+  }
+  let joined = textParts.join('\n');
+  if (nonTextCount > 0) {
+    joined += (joined ? '\n' : '') + `[+ ${nonTextCount} non-text item${nonTextCount > 1 ? 's' : ''}]`;
+  }
+  return joined;
+}
