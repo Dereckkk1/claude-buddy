@@ -47,9 +47,11 @@ export async function parseFile(filePath: string): Promise<ParsedAttachment> {
   // PDF
   if (ext === '.pdf') {
     try {
-      const pdfParse = (await import('pdf-parse')).default as (b: Buffer) => Promise<{ text: string }>;
+      const pdfModule = await import('pdf-parse');
+      const pdfParse = (pdfModule as unknown as { default?: typeof pdfModule } & typeof pdfModule).default
+        ?? (pdfModule as unknown as (b: Buffer) => Promise<{ text: string }>);
       const buf = await fs.readFile(filePath);
-      const parsed = await pdfParse(buf);
+      const parsed = await (pdfParse as (b: Buffer) => Promise<{ text: string }>)(buf);
       return { kind: 'text', content: `[PDF: ${fileName}]\n\n${parsed.text.trim()}` };
     } catch (e) {
       console.error('[file-parser] pdf failed:', e);
