@@ -1,6 +1,52 @@
+export interface AgentDTO {
+    id: string;
+    name: string;
+    emoji: string;
+    systemPrompt: string;
+    model: 'auto' | 'haiku' | 'sonnet';
+    memories: string[];
+    isBuiltIn: boolean;
+    sharedMemories?: boolean;
+}
+export interface AppSettingsDTO {
+    autostart: boolean;
+    idleTimeoutMs: number;
+    hotkey: string;
+    ttsEnabled: boolean;
+    ttsVoice: string;
+    ttsRate: number;
+    theme: 'light' | 'dark' | 'auto';
+    soundsEnabled: boolean;
+    soundsVolume: number;
+}
 export interface IpcRequests {
     'config:get-api-key': () => string | null;
     'config:set-api-key': (key: string) => void;
+    'memories:list': () => string[];
+    'memories:add': (fact: string) => void;
+    'memories:delete': (index: number) => void;
+    'memories:clear': () => void;
+    'agents:list': () => AgentDTO[];
+    'agents:get-active': () => AgentDTO;
+    'agents:set-active': (id: string) => void;
+    'agents:create': (input: Omit<AgentDTO, 'id' | 'isBuiltIn' | 'memories'>) => AgentDTO;
+    'agents:update': (params: {
+        id: string;
+        patch: Partial<Omit<AgentDTO, 'id' | 'isBuiltIn'>>;
+    }) => AgentDTO | null;
+    'agents:delete': (id: string) => void;
+    'settings:get': () => AppSettingsDTO;
+    'settings:update': (patch: Partial<AppSettingsDTO>) => AppSettingsDTO;
+    'settings:open': () => void;
+    'tts:synthesize': (params: {
+        text: string;
+        voice: string;
+        rate?: number;
+    }) => string;
+    'tts:voices': () => {
+        id: string;
+        label: string;
+    }[];
     'position:get': () => {
         x: number;
         y: number;
@@ -36,6 +82,7 @@ export interface IpcRequests {
         h: number;
     }) => void;
     'keyboard:paste-to-active': (text: string) => void;
+    'keyboard:read-selection': () => string | null;
     'agent:screen-size': () => {
         realWidth: number;
         realHeight: number;
@@ -74,6 +121,14 @@ export interface IpcRequests {
         x: number;
         y: number;
     };
+    'file:pick-and-parse': () => {
+        kind: 'text';
+        content: string;
+    } | {
+        kind: 'image';
+        mimeType: string;
+        base64: string;
+    } | null;
 }
 export interface IpcEvents {
     'hotkey:activate': void;

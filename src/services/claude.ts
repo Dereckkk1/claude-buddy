@@ -68,6 +68,8 @@ function attachmentsToBlocks(attachments: Attachment[]): ContentBlock[] {
 }
 
 function buildInitialMessages(messages: Message[], attachments: Attachment[]): Anthropic.MessageParam[] {
+  // SDK types want a string union for media_type — we trust the runtime values.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lastUserIdx = (() => {
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'user') return i;
     return -1;
@@ -79,9 +81,9 @@ function buildInitialMessages(messages: Message[], attachments: Attachment[]): A
       return {
         role: m.role,
         content: [...attBlocks, { type: 'text' as const, text: m.content }],
-      };
+      } as Anthropic.MessageParam;
     }
-    return { role: m.role, content: [{ type: 'text' as const, text: m.content }] };
+    return { role: m.role, content: [{ type: 'text' as const, text: m.content }] } as Anthropic.MessageParam;
   });
 }
 
