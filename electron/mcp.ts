@@ -427,10 +427,19 @@ export async function callTool(
       { timeout: 30_000, signal: controller.signal },
     );
     clearTimeout(timer);
-    return { ok: !result.isError, content: joinTextContent(result.content) };
+    const text = joinTextContent(result.content);
+    // When the server reports an error, its `content` carries the human-
+    // readable explanation. Surface it as `error` (not `content`) so the
+    // renderer's `error: ${r.error}` formatting works correctly.
+    if (result.isError) {
+      console.warn(`[mcp] ${parsed.serverName}.${parsed.originalName} returned error:`, text);
+      return { ok: false, content: '', error: text || 'tool reported error' };
+    }
+    return { ok: true, content: text };
   } catch (e) {
     clearTimeout(timer);
     const msg = e instanceof Error ? e.message : 'tool call failed';
+    console.error(`[mcp] ${parsed.serverName}.${parsed.originalName} threw:`, msg);
     return { ok: false, content: '', error: msg };
   }
 }
