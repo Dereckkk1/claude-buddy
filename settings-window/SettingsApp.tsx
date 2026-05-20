@@ -3,10 +3,11 @@ import { invoke } from '../src/services/ipc';
 import { useTheme } from '../src/hooks/useTheme';
 import { useT } from '../src/i18n';
 import { AgentsTab } from './AgentsTab';
+import { MCPTab } from './MCPTab';
 import type { AppSettingsDTO, Locale } from '@shared/ipc-types';
 import './settings.css';
 
-type Tab = 'general' | 'agents' | 'memories' | 'about';
+type Tab = 'general' | 'agents' | 'mcp' | 'memories' | 'about';
 
 function VoicePicker({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
   const [voices, setVoices] = useState<{ id: string; label: string }[]>([]);
@@ -55,6 +56,7 @@ export function SettingsApp() {
         <nav>
           <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>{t('settings.sidebar.general')}</button>
           <button className={tab === 'agents' ? 'active' : ''} onClick={() => setTab('agents')}>{t('settings.sidebar.agents')}</button>
+          <button className={tab === 'mcp' ? 'active' : ''} onClick={() => setTab('mcp')}>{t('settings.sidebar.mcp')}</button>
           <button className={tab === 'memories' ? 'active' : ''} onClick={() => setTab('memories')}>
             {t('settings.sidebar.memories')} <span className="count">{memories.length}</span>
           </button>
@@ -182,6 +184,8 @@ export function SettingsApp() {
         )}
 
         {tab === 'agents' && <AgentsTab />}
+
+        {tab === 'mcp' && <MCPTab />}
 
         {tab === 'memories' && (
           <>
