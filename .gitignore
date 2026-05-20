@@ -7,3 +7,11 @@ release/
 .env
 .DS_Store
 *.log
+# tsc emit artifacts (we use vite-plugin-electron to bundle)
+electron/*.js
+electron/*.d.ts
+shared/*.js
+shared/*.d.ts
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo
