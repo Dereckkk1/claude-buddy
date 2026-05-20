@@ -308,6 +308,13 @@ export default function App() {
               ))}
             </div>
           )}
+          {showInput && conv.attachedPaths.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              {conv.attachedPaths.map((p) => (
+                <AttachmentChip key={p.id} attachedPath={p} onRemove={() => conv.removeAttachedPath(p.id)} />
+              ))}
+            </div>
+          )}
           {showInput && showAttachPicker && (
             <AttachPicker
               onClose={() => setShowAttachPicker(false)}
