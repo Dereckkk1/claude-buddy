@@ -59,3 +59,37 @@ describe('listFolder (non-recursive)', () => {
     expect(readme?.size).toBeGreaterThan(0);
   });
 });
+
+describe('listFolder recursive + limits', () => {
+  it('lists subfolder entries recursively when opts.recursive=true', async () => {
+    const root = makeFixture();
+    const out = await listFolder(root, { recursive: true });
+    const names = out.entries.map(e => e.name);
+    // `src/` should be present AND its child `index.ts` should appear with a path-like name
+    expect(names.some(n => n === 'src/index.ts')).toBe(true);
+  });
+
+  it('stops at maxRecursionDepth', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-deep-'));
+    // build a 7-deep chain a/b/c/d/e/f/g with a file at every level
+    let cur = root;
+    for (const seg of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
+      cur = join(cur, seg);
+      mkdirSync(cur);
+      writeFileSync(join(cur, 'leaf.txt'), seg);
+    }
+    const out = await listFolder(root, { recursive: true });
+    const names = out.entries.map(e => e.name);
+    // depth 5 max → a/leaf.txt..e/leaf.txt allowed, f/g leaf NOT
+    expect(names).toContain('a/b/c/d/e/leaf.txt');
+    expect(names).not.toContain('a/b/c/d/e/f/leaf.txt');
+  });
+
+  it('truncates at maxEntries and sets truncated=true', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-many-'));
+    for (let i = 0; i < 250; i++) writeFileSync(join(root, `f${i}.txt`), '');
+    const out = await listFolder(root, { maxEntries: 100 });
+    expect(out.entries.length).toBe(100);
+    expect(out.truncated).toBe(true);
+  });
+});

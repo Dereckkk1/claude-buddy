@@ -85,23 +85,34 @@ export async function listFolder(
   const ig = buildIgnoreMatcher();
   const entries: FolderEntry[] = [];
 
-  const dirents = await fs.readdir(rootPath, { withFileTypes: true });
-  for (const d of dirents) {
-    if (entries.length >= maxEntries) {
-      return { path: rootPath, entries, truncated: true };
+  async function walk(currentPath: string, relPrefix: string, depth: number): Promise<boolean> {
+    // returns false when we hit truncation, true otherwise
+    if (depth > LIMITS.maxRecursionDepth) return true;
+    const dirents = await fs.readdir(currentPath, { withFileTypes: true }).catch(() => []);
+    for (const d of dirents) {
+      if (entries.length >= maxEntries) return false;
+      const rel = relPrefix ? `${relPrefix}/${d.name}` : d.name;
+      // Apply ignores against the full relative path so that nested matches work
+      if (matches(ig, rel, d.isDirectory())) continue;
+      const full = path.join(currentPath, d.name);
+      const stat = await fs.stat(full).catch(() => null);
+      if (!stat) continue;
+      entries.push({
+        name: rel,
+        type: d.isDirectory() ? 'folder' : 'file',
+        size: d.isDirectory() ? 0 : stat.size,
+        modified: stat.mtimeMs,
+      });
+      if (opts.recursive && d.isDirectory()) {
+        const keepGoing = await walk(full, rel, depth + 1);
+        if (!keepGoing) return false;
+      }
     }
-    if (matches(ig, d.name, d.isDirectory())) continue;
-    const full = path.join(rootPath, d.name);
-    const stat = await fs.stat(full).catch(() => null);
-    if (!stat) continue;
-    entries.push({
-      name: d.name,
-      type: d.isDirectory() ? 'folder' : 'file',
-      size: d.isDirectory() ? 0 : stat.size,
-      modified: stat.mtimeMs,
-    });
+    return true;
   }
-  return { path: rootPath, entries, truncated: false };
+
+  const keepGoing = await walk(rootPath, '', 0);
+  return { path: rootPath, entries, truncated: !keepGoing };
 }
 
 export async function readFile(
