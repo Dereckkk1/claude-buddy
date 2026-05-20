@@ -60,6 +60,11 @@ export default function App() {
   }, [state, agentRunning, showAttachPicker]);
 
   useEffect(() => { refreshMemoriesCache(); }, []);
+  // Keep the main-process scope guard in sync with the renderer's attached
+  // paths so list_folder/read_file only ever touch what the user attached.
+  useEffect(() => {
+    invoke('files:set-scope', conv.attachedPaths.map((p) => p.path));
+  }, [conv.attachedPaths]);
   useEffect(() => {
     invoke('settings:get').then(setSettings);
     const handler = (...args: unknown[]) => {
@@ -307,6 +312,10 @@ export default function App() {
             <AttachPicker
               onClose={() => setShowAttachPicker(false)}
               onAttach={(a) => { conv.addAttachment(a); setShowAttachPicker(false); }}
+              onAttachPath={(p) => {
+                conv.addAttachedPath({ ...p, id: crypto.randomUUID() });
+                setShowAttachPicker(false);
+              }}
             />
           )}
           {showInput && (

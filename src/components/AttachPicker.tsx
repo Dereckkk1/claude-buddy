@@ -6,6 +6,7 @@ import type { Attachment } from '@/state/conversation';
 
 interface Props {
   onAttach: (a: Attachment) => void;
+  onAttachPath: (p: { kind: 'file' | 'folder'; path: string; name: string; size: number }) => void;
   onClose: () => void;
 }
 
@@ -15,7 +16,7 @@ interface ClipboardItem {
   data: Attachment;
 }
 
-export function AttachPicker({ onAttach, onClose }: Props) {
+export function AttachPicker({ onAttach, onAttachPath, onClose }: Props) {
   const t = useT();
   const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
   const [showClipboard, setShowClipboard] = useState(false);
@@ -57,6 +58,12 @@ export function AttachPicker({ onAttach, onClose }: Props) {
     if (result) onAttach(result);
   };
 
+  const handleFolder = async () => {
+    const r = await invoke('files:pick-folder');
+    if (!r) return;
+    onAttachPath({ kind: 'folder', path: r.path, name: r.name, size: r.size });
+  };
+
   return (
     <div className="attach-picker">
       {!showClipboard ? (
@@ -80,6 +87,13 @@ export function AttachPicker({ onAttach, onClose }: Props) {
             <div>
               <div className="attach-option-title">{t('attach.file')}</div>
               <div className="attach-option-sub">{t('attach.fileSub')}</div>
+            </div>
+          </button>
+          <button className="attach-option" onClick={handleFolder}>
+            <span className="attach-option-icon">📁</span>
+            <div>
+              <div className="attach-option-title">{t('attach.folder')}</div>
+              <div className="attach-option-sub">{t('attach.folderSub')}</div>
             </div>
           </button>
         </>
