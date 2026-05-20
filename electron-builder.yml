@@ -1,0 +1,34 @@
+appId: com.dereck.claudebuddy
+productName: Claude Buddy
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - assets/**/*
+  - package.json
+extraResources:
+  - from: assets/sprites
+    to: sprites
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: assets/sprites/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Claude Buddy
+publish:
+  # Pra ativar auto-update, troque por seu provider:
+  # provider: github
+  # owner: seu-usuario
+  # repo: claude-buddy
+  # OU generic:
+  # provider: generic
+  # url: https://meudominio.com/updates/
+  provider: generic
+  url: https://example.com/claude-buddy-updates/

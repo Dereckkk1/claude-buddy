@@ -1,19 +1,19 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'node:path';
 
-const MASCOT_WIDTH = 400;
-const MASCOT_HEIGHT = 300;
-const MARGIN = 16;
+export const MASCOT_COLLAPSED = { w: 200, h: 110 };
+export const MASCOT_EXPANDED = { w: 560, h: 380 };
+const MARGIN = 12;
 
 export function createMascotWindow(savedPosition?: { x: number; y: number }): BrowserWindow {
   const display = screen.getPrimaryDisplay();
   const { width: screenW, height: screenH } = display.workArea;
-  const defaultX = display.workArea.x + screenW - MASCOT_WIDTH - MARGIN;
-  const defaultY = display.workArea.y + screenH - MASCOT_HEIGHT - MARGIN;
+  const defaultX = display.workArea.x + screenW - MASCOT_COLLAPSED.w - MARGIN;
+  const defaultY = display.workArea.y + screenH - MASCOT_COLLAPSED.h - MARGIN;
 
   const win = new BrowserWindow({
-    width: MASCOT_WIDTH,
-    height: MASCOT_HEIGHT,
+    width: MASCOT_COLLAPSED.w,
+    height: MASCOT_COLLAPSED.h,
     x: savedPosition?.x ?? defaultX,
     y: savedPosition?.y ?? defaultY,
     frame: false,

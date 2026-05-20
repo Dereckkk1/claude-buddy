@@ -1,29 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { useSpriteAnimation } from '@/hooks/useSpriteAnimation';
+import { renderCrab } from '@/services/crab-renderer';
 import type { SpriteState, SpriteSheetDescriptor } from '@/services/sprite-animator';
-import spritesJson from '../../assets/sprites/sprites.json';
-
-type SpritesConfig = Record<SpriteState, {
-  src: string;
-  frames: number;
-  fps: number;
-  loop: boolean;
-  nextState: SpriteState | null;
-  frameWidth: number;
-  frameHeight: number;
-}>;
-
-const sprites = spritesJson as SpritesConfig;
 
 const descriptor: SpriteSheetDescriptor = {
-  states: Object.fromEntries(
-    Object.entries(sprites).map(([k, v]) => [k, {
-      frames: v.frames, fps: v.fps, loop: v.loop, nextState: v.nextState,
-    }])
-  ) as SpriteSheetDescriptor['states'],
+  states: {
+    sleeping: { frames: 3, fps: 1.5, loop: true, nextState: null },
+    waking:   { frames: 8, fps: 10, loop: false, nextState: 'idle' },
+    idle:     { frames: 2, fps: 1.7, loop: true, nextState: null },
+    thinking: { frames: 4, fps: 6, loop: true, nextState: null },
+    talking:  { frames: 3, fps: 8, loop: true, nextState: null },
+  },
 };
 
-const SPRITE_SIZE = 64;
+const GRID_W = 18;
+const GRID_H = 10;
+const SCALE = 7; // 18*7 = 126px wide (with claws), 10*7 = 70px tall
 
 interface Props {
   state: SpriteState;
@@ -33,39 +25,31 @@ interface Props {
 
 export function Mascot({ state, onClick, onMouseDown }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
   const { state: currentState, frame, setState } = useSpriteAnimation(descriptor);
 
-  useEffect(() => {
-    setState(state);
-  }, [state, setState]);
-
-  useEffect(() => {
-    const img = new Image();
-    img.src = new URL(`../../assets/sprites/${sprites[currentState].src}`, import.meta.url).href;
-    img.onload = () => { imgRef.current = img; };
-  }, [currentState]);
+  useEffect(() => { setState(state); }, [state, setState]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const img = imgRef.current;
-    if (!canvas || !img) return;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
     ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
-    const cfg = sprites[currentState];
-    const sx = (frame % cfg.frames) * cfg.frameWidth;
-    ctx.drawImage(img, sx, 0, cfg.frameWidth, cfg.frameHeight, 0, 0, SPRITE_SIZE, SPRITE_SIZE);
+    renderCrab({ ctx, size: { w: GRID_W, h: GRID_H }, scale: SCALE, state: currentState, frame });
   }, [frame, currentState]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={SPRITE_SIZE}
-      height={SPRITE_SIZE}
+      width={(GRID_W * SCALE) + 50}
+      height={GRID_H * SCALE}
       onClick={onClick}
       onMouseDown={onMouseDown}
-      style={{ cursor: 'pointer', imageRendering: 'pixelated' }}
+      style={{
+        cursor: 'pointer',
+        imageRendering: 'pixelated',
+        filter: 'drop-shadow(0 6px 14px rgba(204,120,92,0.4))',
+        display: 'block',
+      }}
     />
   );
 }

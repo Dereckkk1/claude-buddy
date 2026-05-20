@@ -1,53 +1,34 @@
 import { describe, it, expect } from 'vitest';
-import { buildClaudePayload } from '@/services/claude';
+import { pickModel } from '@/services/claude';
 import type { Message, Attachment } from '@/state/conversation';
 
-describe('buildClaudePayload', () => {
-  it('builds text-only payload from messages', () => {
-    const msgs: Message[] = [
-      { role: 'user', content: 'oi' },
-      { role: 'assistant', content: 'oi!' },
-      { role: 'user', content: 'tudo bem?' },
-    ];
-    const payload = buildClaudePayload(msgs, []);
-    expect(payload.model).toBe('claude-haiku-4-5-20251001');
-    expect(payload.messages).toEqual([
-      { role: 'user', content: [{ type: 'text', text: 'oi' }] },
-      { role: 'assistant', content: [{ type: 'text', text: 'oi!' }] },
-      { role: 'user', content: [{ type: 'text', text: 'tudo bem?' }] },
-    ]);
+describe('pickModel', () => {
+  it('picks haiku for simple short prompts', () => {
+    const msgs: Message[] = [{ role: 'user', content: 'oi' }];
+    expect(pickModel(msgs, [])).toContain('haiku');
   });
 
-  it('attaches image to the latest user message', () => {
-    const msgs: Message[] = [{ role: 'user', content: 'passa a receita' }];
-    const atts: Attachment[] = [{ kind: 'image', mimeType: 'image/png', base64: 'BASE64DATA' }];
-    const payload = buildClaudePayload(msgs, atts);
-    expect(payload.messages[0].content).toEqual([
-      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'BASE64DATA' } },
-      { type: 'text', text: 'passa a receita' },
-    ]);
+  it('picks sonnet when prompt has deep reasoning keywords', () => {
+    const msgs: Message[] = [{ role: 'user', content: 'explica como funciona o React' }];
+    expect(pickModel(msgs, [])).toContain('sonnet');
   });
 
-  it('appends text attachments as quoted blocks to the latest user message', () => {
-    const msgs: Message[] = [{ role: 'user', content: 'corrige a ortografia' }];
-    const atts: Attachment[] = [{ kind: 'text', content: 'foi vc qe esquesseu' }];
-    const payload = buildClaudePayload(msgs, atts);
-    expect(payload.messages[0].content).toEqual([
-      { type: 'text', text: 'corrige a ortografia\n\n---\nTEXTO SELECIONADO:\nfoi vc qe esquesseu' },
-    ]);
+  it('picks sonnet for long prompts', () => {
+    const msgs: Message[] = [{ role: 'user', content: 'a'.repeat(600) }];
+    expect(pickModel(msgs, [])).toContain('sonnet');
   });
 
-  it('only attaches to the last user message, not all', () => {
-    const msgs: Message[] = [
-      { role: 'user', content: 'primeira' },
-      { role: 'assistant', content: 'ok' },
-      { role: 'user', content: 'segunda' },
-    ];
-    const atts: Attachment[] = [{ kind: 'text', content: 'EXTRA' }];
-    const payload = buildClaudePayload(msgs, atts);
-    expect(payload.messages[0].content).toEqual([{ type: 'text', text: 'primeira' }]);
-    expect(payload.messages[2].content).toEqual([
-      { type: 'text', text: 'segunda\n\n---\nTEXTO SELECIONADO:\nEXTRA' },
-    ]);
+  it('picks sonnet for multi-turn conversations', () => {
+    const msgs: Message[] = Array.from({ length: 7 }, (_, i) => ({
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: 'msg',
+    }));
+    expect(pickModel(msgs, [])).toContain('sonnet');
+  });
+
+  it('picks sonnet when image is large', () => {
+    const msgs: Message[] = [{ role: 'user', content: 'o que é isso?' }];
+    const atts: Attachment[] = [{ kind: 'image', mimeType: 'image/png', base64: 'x'.repeat(500_000) }];
+    expect(pickModel(msgs, atts)).toContain('sonnet');
   });
 });

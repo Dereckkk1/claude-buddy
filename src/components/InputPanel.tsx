@@ -1,19 +1,21 @@
-import { useState } from 'react';
-
-// STT desligado: Web Speech API não funciona no Electron (falta a chave Google).
-// Reativar requer trocar a impl (Whisper local WASM ou OpenAI Whisper API).
-const STT_ENABLED = false;
+import { useState, useEffect, useRef } from 'react';
+import buddyIcon from '../../assets/sprites/icon.png';
 
 interface Props {
   onSubmit: (text: string) => void;
-  onCapture: () => void;
-  onClipboard: () => void;
-  onSelectionAttach: () => void;
+  onAttach: () => void;
+  agentMode: boolean;
+  onToggleAgent: () => void;
   disabled?: boolean;
 }
 
-export function InputPanel({ onSubmit, onCapture, onClipboard, onSelectionAttach, disabled }: Props) {
+export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disabled }: Props) {
   const [text, setText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!disabled) inputRef.current?.focus();
+  }, [disabled]);
 
   const handleSubmit = () => {
     if (!text.trim() || disabled) return;
@@ -23,32 +25,47 @@ export function InputPanel({ onSubmit, onCapture, onClipboard, onSelectionAttach
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
         <input
-          style={{ flex: 1, padding: 6, border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }}
-          placeholder="digita aqui..."
+          ref={inputRef}
+          className="cb-input"
+          placeholder={agentMode ? 'qual o objetivo? (ex: abre a calculadora)' : 'pergunta qualquer coisa...'}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
           disabled={disabled}
+          autoFocus
         />
-        {STT_ENABLED && <button disabled={disabled} title="falar">🎤</button>}
-        <button onClick={handleSubmit} disabled={disabled || !text.trim()}>➤</button>
+        <button
+          className="cb-btn cb-btn-primary"
+          onClick={handleSubmit}
+          disabled={disabled || !text.trim()}
+        >Enviar</button>
       </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-        <button style={btnStyle} onClick={onCapture} disabled={disabled}>📷 print</button>
-        <button style={btnStyle} onClick={onSelectionAttach} disabled={disabled}>✂️ seleção</button>
-        <button style={btnStyle} onClick={onClipboard} disabled={disabled}>📋 clipboard</button>
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'space-between' }}>
+        <button
+          className="cb-btn cb-btn-ghost"
+          onClick={onAttach}
+          disabled={disabled}
+          title="anexar imagem, arquivo ou item do clipboard"
+        >＋ Anexar</button>
+        <button
+          className={agentMode ? 'cb-btn cb-btn-primary' : 'cb-btn cb-btn-ghost'}
+          onClick={onToggleAgent}
+          disabled={disabled}
+          title="modo agente — o mascote pilota o computador"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          <img
+            src={buddyIcon}
+            alt=""
+            width={18}
+            height={24}
+            style={{ imageRendering: 'pixelated', display: 'block' }}
+          />
+          Modo Agente {agentMode ? '✓' : ''}
+        </button>
       </div>
     </div>
   );
 }
-
-const btnStyle: React.CSSProperties = {
-  background: '#f0f0f0',
-  border: 'none',
-  padding: '4px 8px',
-  borderRadius: 6,
-  fontSize: 12,
-  cursor: 'pointer',
-};

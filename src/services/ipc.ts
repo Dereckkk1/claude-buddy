@@ -1,5 +1,20 @@
 import type { IpcRequests } from '@shared/ipc-types';
 
+interface ElectronAPI {
+  invoke<K extends keyof IpcRequests>(
+    channel: K,
+    ...args: Parameters<IpcRequests[K]>
+  ): Promise<ReturnType<IpcRequests[K]>>;
+  on(channel: string, listener: (...args: unknown[]) => void): void;
+  off(channel: string): void;
+}
+
+declare global {
+  interface Window {
+    electronAPI: ElectronAPI;
+  }
+}
+
 export function invoke<K extends keyof IpcRequests>(
   channel: K,
   ...args: Parameters<IpcRequests[K]>
