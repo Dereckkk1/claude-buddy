@@ -48,6 +48,10 @@ export const EN = {
     imageSize: 'image ({kb}KB)',
     imageAttached: 'image attached',
     removeChip: 'remove',
+    folder: 'Folder',
+    folderSub: 'attach a whole folder for the agent to read',
+    dropHere: 'Drop to attach',
+    folderItemSuffix: '(folder)',
   },
 
   // Response view
@@ -71,6 +75,8 @@ export const EN = {
     screenshot: 'took a screenshot',
     attached_image: 'read the image',
     attached_file: 'read the file',
+    list_folder: 'listed folder',
+    read_file: 'read file',
   },
 
   // Status / inline UI
@@ -291,6 +297,10 @@ export const PT: StringDict = {
     imageSize: 'imagem ({kb}KB)',
     imageAttached: 'imagem anexada',
     removeChip: 'remover',
+    folder: 'Pasta',
+    folderSub: 'anexa uma pasta inteira pro agente ler',
+    dropHere: 'Solte aqui',
+    folderItemSuffix: '(pasta)',
   },
 
   response: {
@@ -312,6 +322,8 @@ export const PT: StringDict = {
     screenshot: 'tirou print da tela',
     attached_image: 'leu a imagem',
     attached_file: 'leu o arquivo',
+    list_folder: 'listou a pasta',
+    read_file: 'leu o arquivo',
   },
 
   bubble: {
@@ -522,6 +534,10 @@ export const ES: StringDict = {
     imageSize: 'imagen ({kb}KB)',
     imageAttached: 'imagen adjuntada',
     removeChip: 'quitar',
+    folder: 'Carpeta',
+    folderSub: 'adjunta una carpeta entera para que el agente lea',
+    dropHere: 'Suelta aquí',
+    folderItemSuffix: '(carpeta)',
   },
 
   response: {
@@ -543,6 +559,8 @@ export const ES: StringDict = {
     screenshot: 'sacó una captura',
     attached_image: 'leyó la imagen',
     attached_file: 'leyó el archivo',
+    list_folder: 'listó la carpeta',
+    read_file: 'leyó el archivo',
   },
 
   bubble: {
