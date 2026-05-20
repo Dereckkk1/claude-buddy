@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Message, Attachment } from '@/state/conversation';
+import type { Message, Attachment, AttachedPath } from '@/state/conversation';
 import type { AgentDTO, Locale } from '@shared/ipc-types';
 import { translate } from '@shared/i18n-strings';
 import { invoke } from './ipc';
@@ -65,6 +65,12 @@ function memoriesBlock(memories: string[], locale: Locale): string {
   if (memories.length === 0) return '';
   const label = translate(locale, 'toolInstructions.memoriesLabel');
   return `${label}\n${memories.map((f) => `- ${f}`).join('\n')}`;
+}
+
+function attachedPathsBlock(paths: AttachedPath[]): string {
+  if (paths.length === 0) return '';
+  const lines = paths.map((p) => `- [${p.kind}] ${p.path}`).join('\n');
+  return `\n\nATTACHED PATHS (use list_folder / read_file when relevant):\n${lines}`;
 }
 
 function languageDirective(locale: Locale): string {
@@ -136,6 +142,7 @@ export async function chatWithSkills(
   attachments: Attachment[],
   agent: AgentDTO,
   callbacks: StreamCallbacks,
+  attachedPaths: AttachedPath[] = [],
 ): Promise<void> {
   const client = await getClient();
   const model = modelForAgent(agent, messages, attachments);
@@ -150,6 +157,7 @@ export async function chatWithSkills(
     '---',
     agent.systemPrompt,
     memoriesBlock(agent.memories, locale),
+    attachedPathsBlock(attachedPaths),
   ].join('\n\n');
 
   for (let iter = 0; iter < 6; iter++) {
