@@ -208,6 +208,7 @@ export default function App() {
     try {
       const snapshotMessages = useConversation.getState().messages;
       const snapshotAttachments = useConversation.getState().attachments;
+      const snapshotAttachedPaths = useConversation.getState().attachedPaths;
       if (!activeAgent) throw new Error('UNKNOWN');
       await chatWithSkills(snapshotMessages, snapshotAttachments, activeAgent, {
         onChunk: (chunk) => {
@@ -230,7 +231,7 @@ export default function App() {
           conv.appendAssistantChunk(`\n\n[[step:${name}]]\n\n`);
           if (settings?.soundsEnabled && name === 'edit_in_place') playPasted();
         },
-      });
+      }, snapshotAttachedPaths);
       while (useConversation.getState().attachments.length > 0) conv.removeAttachment(0);
       conv.setStatus('idle');
       setState('idle');
