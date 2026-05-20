@@ -74,6 +74,11 @@ function attachedPathsBlock(paths: AttachedPath[]): string {
   return `\n\nATTACHED PATHS (use list_folder / read_file when relevant):\n${lines}`;
 }
 
+function mcpHintBlock(toolCount: number, serverNames: string[]): string {
+  if (toolCount === 0) return '';
+  return `\n\nMCP TOOLS DISPONÍVEIS: ${toolCount} tools de servers conectados (${serverNames.join(', ')}).\n\nElas aparecem na lista de tools com prefixo <server>_<tool>. USE PROATIVAMENTE quando relevante — NUNCA diga "não tenho acesso a X" sem tentar a tool primeiro. Se o user pergunta algo que parece bater com uma tool MCP, tenta chamá-la. Pra GitHub MCP especificamente: você pode descobrir o username do user via get_me (ou similar) — não pergunte antes de tentar.`;
+}
+
 function languageDirective(locale: Locale): string {
   return translate(locale, 'systemPrompt.respondInLanguage');
 }
@@ -151,6 +156,8 @@ export async function chatWithSkills(
 
   const apiMessages: Anthropic.MessageParam[] = buildInitialMessages(messages, attachments);
   const locale = getLocale();
+  const mcpTools = getMCPTools();
+  const mcpServerNames = Array.from(new Set(mcpTools.map((t) => t.serverName)));
   const system = [
     buildToolInstructions(locale),
     '---',
@@ -159,14 +166,15 @@ export async function chatWithSkills(
     agent.systemPrompt,
     memoriesBlock(agent.memories, locale),
     attachedPathsBlock(attachedPaths),
+    mcpHintBlock(mcpTools.length, mcpServerNames),
   ].join('\n\n');
 
   for (let iter = 0; iter < 6; iter++) {
     try {
       // Merge native tools + web_search (server-side) + any MCP tools that
-      // are currently advertised by running servers. The cache makes this
-      // synchronous; states-changed events keep it fresh between turns.
-      const mcpToolDefs = getMCPTools().map((t) => ({
+      // are currently advertised by running servers. Reusing mcpTools from
+      // the outer scope so we don't list the cache twice per request.
+      const mcpToolDefs = mcpTools.map((t) => ({
         name: t.prefixedName,
         description: t.description,
         input_schema: t.inputSchema,

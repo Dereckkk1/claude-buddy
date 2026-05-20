@@ -29,6 +29,20 @@ calm desktop UI could go.
 - **Native web search.** Uses Anthropic's server-side `web_search` tool so
   the agent can pull live info (news, prices, recent docs, versions) up to
   3 times per turn, with citations.
+- **Reads files and folders.** Drag any file or folder onto the mascot (or
+  attach via the `+` picker) and the agent uses `list_folder` + `read_file`
+  tools to navigate and answer about it. Supports text/code, PDF (via the
+  serverless `unpdf`), DOCX (via `mammoth`), and images (via Claude Vision).
+  Scope-guarded — the agent can only touch paths you explicitly attached.
+- **Runs shell commands with HITL approval.** A `run_command` tool lets
+  the agent propose PowerShell commands; an inline card with Cancel / Edit
+  / Run buttons gates every execution. Result (stdout, stderr, exit code,
+  duration) comes back as an expandable card in the bubble.
+- **MCP support.** Connect any [Model Context Protocol](https://modelcontextprotocol.io)
+  server (filesystem, github, slack, postgres, brave-search, memory, etc).
+  Add via form or paste a Claude-Desktop-style JSON config. Tools auto-merge
+  into the agent's toolbox with `<server>_<tool>` prefix routing. Stdio
+  transport, encrypted env vars, status dots that update live.
 - **Multi-agent.** Four built-in personalities (Buddy, Code Helper, Language
   Tutor, Writer) plus user-defined custom agents. Each has its own system
   prompt, memories, and preferred model. Optional memory sharing between
@@ -62,11 +76,16 @@ calm desktop UI could go.
 
 - **Electron 33** + **Vite** + **React 18** + **TypeScript** (strict mode)
 - **Anthropic SDK** with streaming tool use and computer-use beta
+- **`@modelcontextprotocol/sdk`** for the MCP client (stdio transport)
 - **Zustand** for ephemeral conversation state
 - **electron-store** with machine-id-derived encryption for persisted secrets
+  (API key, agent memories, MCP server env vars)
 - **msedge-tts** for neural voices (with `bufferutil` / `utf-8-validate`
   externalized to avoid native rebuilds on Windows)
-- **pdf-parse** + **mammoth** for PDF/DOCX attachment parsing
+- **unpdf** + **mammoth** for PDF/DOCX parsing — serverless pdfjs port that
+  doesn't need a Web Worker (works in the Electron main process where
+  pdf-parse's worker can't be bundled)
+- **`ignore`** for `.gitignore`-aware folder listing
 - **Pure 2D canvas pixel-art renderer** (no sprite sheet — every frame is
   drawn procedurally from a 18×10 grid, scales perfectly on hi-DPI)
 - **Zero-dep PNG encoder** (`scripts/generate-icon.mjs`) — generates the app
@@ -84,11 +103,25 @@ a reviewer's time:
   Uses PowerShell `EncodedCommand` with `AttachThreadInput` so the mascot
   can read selections and paste into apps it doesn't own, without the
   Windows foreground-lock blocking SendKeys.
+- **`electron/mcp.ts`** — the entire MCP client lifecycle in one module.
+  Eager startup, encrypted config store, prefix-based tool routing
+  (`<server>_<tool>`), 60s handshake timeout (because `npx -y` cold start
+  can take 30s+), and stderr captured into the crashed-state error message
+  for one-glance debugging.
+- **`src/services/mcp-tools-cache.ts`** — bridge between main and renderer.
+  Synchronous cache (so `claude.ts` can build the API call's tools array
+  without awaiting IPC every turn) + React hook for the settings UI that
+  re-renders on `mcp:states-changed` events.
+- **`src/services/run-command-bridge.ts`** — dual-channel approval registry
+  for the shell tool. The agent's `executeTool` blocks on a Promise until
+  the user clicks a card; meanwhile the card subscribes to a separate
+  result channel so the executor (not the card) owns the IPC and there's
+  no duplicate execution.
 - **`src/services/claude.ts`** — the streaming chat loop with multi-turn
-  tool use. Handles client-side tools (read/edit/save_memory) and
-  server-side tools (web_search) differently, layers the system prompt with
+  tool use. Handles client-side tools, server-side tools (`web_search`),
+  and prefixed MCP tools in the same loop. Layers the system prompt with
   per-locale tool instructions + language directive + agent prompt +
-  memories.
+  memories + attached paths + MCP hint block.
 - **`shared/i18n-strings.ts`** — single dictionary that powers UI strings,
   tray menu, voice labels, and built-in agent prompts across both renderer
   and main process. Built-ins derive name + prompt from the dict at read

@@ -274,7 +274,7 @@ export const EN = {
     },
     about: {
       heading: 'About',
-      version: 'Claude Buddy v0.4.0',
+      version: 'Claude Buddy v1.0.0',
       tagline: 'Desktop pixel-art mascot powered by Claude.',
       built: 'Built with Electron, React, TypeScript, and a lot of coffee.',
       authorLabel: 'Author',
@@ -578,7 +578,7 @@ export const PT: StringDict = {
     },
     about: {
       heading: 'Sobre',
-      version: 'Claude Buddy v0.4.0',
+      version: 'Claude Buddy v1.0.0',
       tagline: 'Mascote desktop com pixel art e Claude API.',
       built: 'Construído com Electron, React, TypeScript e muita cafeína.',
       authorLabel: 'Autor',
@@ -879,7 +879,7 @@ export const ES: StringDict = {
     },
     about: {
       heading: 'Acerca de',
-      version: 'Claude Buddy v0.4.0',
+      version: 'Claude Buddy v1.0.0',
       tagline: 'Mascota desktop pixel-art con la API de Claude.',
       built: 'Construido con Electron, React, TypeScript y mucha cafeína.',
       authorLabel: 'Autor',
