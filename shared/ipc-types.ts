@@ -77,6 +77,8 @@ export interface IpcRequests {
   'files:pick-folder': () => { path: string; name: string; size: number } | null;
   'files:resolve-dropped': (paths: string[]) =>
     Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;
+  'shell:run-command': (params: { command: string; cwd?: string; timeoutMs?: number }) =>
+    { ok: true; result: import('../electron/shell').RunResult } | { ok: false; error: string };
 }
 
 export interface IpcEvents {

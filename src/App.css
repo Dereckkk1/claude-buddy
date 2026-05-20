@@ -580,3 +580,161 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
   0%, 100% { opacity: 0.3; transform: translateY(0); }
   50%      { opacity: 1;   transform: translateY(-2px); }
 }
+
+/* ── Command approval card (run_command tool) ─────────────────────────────── */
+
+.cb-cmd-card {
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #ffffff;
+  font-size: 13px;
+  color: var(--ink, #141413);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cb-cmd-card-pending {
+  border: 2px solid var(--accent, #d97757);
+}
+.cb-cmd-card-running {
+  border: 1px solid #e8e6dc;
+}
+.cb-cmd-card-result {
+  border: 1px solid #e8e6dc;
+  gap: 0;
+  padding: 8px 12px;
+}
+.cb-cmd-card-ok {
+  border-left: 3px solid #788c5d;
+}
+.cb-cmd-card-err {
+  border-left: 3px solid #d97757;
+}
+
+.cb-cmd-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.cb-cmd-card-header-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.cb-cmd-card-header-button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.cb-cmd-card-icon {
+  font-size: 14px;
+  color: var(--accent, #d97757);
+}
+.cb-cmd-card-ok .cb-cmd-card-icon { color: #788c5d; }
+.cb-cmd-card-err .cb-cmd-card-icon { color: #d97757; }
+
+.cb-cmd-card-code {
+  margin: 0;
+  padding: 8px 10px;
+  background: #f5f4ee;
+  border-radius: 6px;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #141413;
+}
+
+.cb-cmd-card-edit {
+  width: 100%;
+  padding: 8px 10px;
+  background: #f5f4ee;
+  border: 1px solid #e8e6dc;
+  border-radius: 6px;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  color: #141413;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.cb-cmd-card-edit:focus {
+  outline: none;
+  border-color: var(--accent, #d97757);
+}
+
+.cb-cmd-card-cwd {
+  font-size: 11px;
+  color: var(--ink-soft, #b0aea5);
+}
+.cb-cmd-card-cwd code {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  background: #f5f4ee;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.cb-cmd-card-cmd-inline {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  background: #f5f4ee;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #141413;
+}
+
+.cb-cmd-card-meta {
+  font-size: 11px;
+  color: var(--ink-soft, #b0aea5);
+  font-weight: 400;
+}
+
+.cb-cmd-card-toggle {
+  margin-left: auto;
+  color: var(--ink-soft, #b0aea5);
+}
+
+.cb-cmd-card-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.cb-cmd-card-output {
+  margin-top: 8px;
+  border-top: 1px solid #e8e6dc;
+  padding-top: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+.cb-cmd-card-stdout,
+.cb-cmd-card-stderr {
+  margin: 0;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #141413;
+}
+.cb-cmd-card-stderr {
+  color: #b03c2a;
+  margin-top: 6px;
+}
+
+.cb-cmd-card-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e8e6dc;
+  border-top-color: var(--accent, #d97757);
+  border-radius: 50%;
+  display: inline-block;
+  animation: cb-cmd-spin 0.8s linear infinite;
+}
+@keyframes cb-cmd-spin {
+  to { transform: rotate(360deg); }
+}

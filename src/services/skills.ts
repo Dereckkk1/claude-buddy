@@ -1,5 +1,7 @@
 // Skills que o Claude pode chamar como tools — substituem os toggles manuais.
 import { invoke } from './ipc';
+import { useConversation } from '@/state/conversation';
+import { requestApproval, publishCardResult } from './run-command-bridge';
 
 export interface ToolDef {
   name: string;
@@ -60,6 +62,20 @@ export const TOOLS: ToolDef[] = [
         path: { type: 'string', description: 'Caminho ABSOLUTO do arquivo (tipo "C:\\\\Users\\\\x\\\\foo.txt"). Use o `absolutePath` retornado por list_folder, ou o path direto do bloco ATTACHED PATHS.' },
       },
       required: ['path'],
+    },
+  },
+  {
+    name: 'run_command',
+    description:
+      'Executa um comando PowerShell no Windows do usuário. SEMPRE requer confirmação humana antes de rodar — uma UI inline aparece com o comando proposto + working dir + botões Rodar/Cancelar/Editar. Use pra: instalar deps (npm/pip/cargo), git workflow, listagem de sistema (Get-Process, Get-ChildItem), build/test scripts. NÃO use pra coisas que outras tools cobrem (read_file pra arquivos locais, web_search pra info online).\n\nUse sintaxe PowerShell: Get-ChildItem em vez de ls, Get-Process em vez de ps. Comandos universais (git, npm, node, python, docker) têm sintaxe igual em ambos.\n\nRetorno: JSON string com { stdout, stderr, exitCode, durationMs, timedOut }. exitCode 0 = sucesso. Cancelado pelo user retorna { cancelled: true, reason: "user denied" }.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command:   { type: 'string', description: 'Comando PowerShell completo. Ex: "npm install zustand", "git status", "Get-Process | Sort-Object WS -Descending | Select-Object -First 5"' },
+        cwd:       { type: 'string', description: 'Working directory absoluto (opcional). Default: primeira pasta em attachedPaths, fallback home do user.' },
+        timeoutMs: { type: 'number', description: 'Timeout em ms (opcional). Default 120000 (2 min), max 600000 (10 min).' },
+      },
+      required: ['command'],
     },
   },
 ];
@@ -142,6 +158,33 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         };
       }
       return { content: c.text };
+    }
+    case 'run_command': {
+      const command = String(input.command ?? '').trim();
+      if (!command) return { content: 'error: empty command' };
+      const explicitCwd = input.cwd ? String(input.cwd) : undefined;
+      const timeoutMs = typeof input.timeoutMs === 'number' ? input.timeoutMs : undefined;
+      // Cwd resolution: explicit > first attached folder > undefined (main → home)
+      const attachedFolder = useConversation.getState().attachedPaths.find((p) => p.kind === 'folder');
+      const effectiveCwd = explicitCwd ?? attachedFolder?.path;
+
+      const { id, decision: decisionPromise } = requestApproval({ command, cwd: effectiveCwd, timeoutMs });
+      const decision = await decisionPromise;
+      if (!decision.approved) {
+        // resolveApproval already emitted 'cancelled' to the card. Just tell the agent.
+        return { content: JSON.stringify({ cancelled: true, reason: 'user denied' }) };
+      }
+      const r = await invoke('shell:run-command', {
+        command: decision.finalCommand ?? command,
+        cwd: decision.finalCwd ?? effectiveCwd,
+        timeoutMs,
+      });
+      if (!r.ok) {
+        publishCardResult(id, { kind: 'error', error: r.error });
+        return { content: `error: ${r.error}` };
+      }
+      publishCardResult(id, { kind: 'ok', result: r.result });
+      return { content: JSON.stringify(r.result) };
     }
     default:
       return { content: `Tool desconhecida: ${name}` };

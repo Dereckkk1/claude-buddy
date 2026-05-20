@@ -3,6 +3,7 @@ import path from 'node:path';
 import { stat as fsStat } from 'node:fs/promises';
 import { basename, resolve as resolvePath } from 'node:path';
 import { listFolder, readFile as readFileFs, pathIsWithin } from './files';
+import { runPowerShell } from './shell';
 import { createMascotWindow } from './window-manager';
 import { registerHandlers } from './ipc';
 import {
@@ -227,6 +228,15 @@ function bootstrap() {
       const p = r.filePaths[0];
       const s = await fsStat(p).catch(() => null);
       return { path: p, name: basename(p), size: s?.size ?? 0 };
+    },
+    'shell:run-command': async ({ command, cwd, timeoutMs }) => {
+      try {
+        const result = await runPowerShell(command, cwd, timeoutMs);
+        return { ok: true, result };
+      } catch (e) {
+        console.error('[shell] run failed:', e);
+        return { ok: false, error: e instanceof Error ? e.message : 'spawn failed' };
+      }
     },
     'files:resolve-dropped': async (paths) => {
       const out = [] as Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;

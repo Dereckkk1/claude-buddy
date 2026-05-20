@@ -77,6 +77,24 @@ export const EN = {
     attached_file: 'read the file',
     list_folder: 'listed folder',
     read_file: 'read file',
+    run_command: 'ran command',
+  },
+
+  // Shell command approval card
+  shell: {
+    wantsToRun: 'wants to run a command',
+    cwdLabel: 'cwd',
+    homeDir: 'home directory',
+    cancel: 'Cancel',
+    edit: 'Edit',
+    run: 'Run',
+    running: 'running…',
+    ran: 'ran',
+    exitCode: 'exit',
+    timedOut: 'timed out',
+    showOutput: 'show output',
+    hideOutput: 'hide output',
+    noOutput: '(no output)',
   },
 
   // Status / inline UI
@@ -324,6 +342,23 @@ export const PT: StringDict = {
     attached_file: 'leu o arquivo',
     list_folder: 'listou a pasta',
     read_file: 'leu o arquivo',
+    run_command: 'rodou comando',
+  },
+
+  shell: {
+    wantsToRun: 'quer rodar um comando',
+    cwdLabel: 'pasta',
+    homeDir: 'home do usuário',
+    cancel: 'Cancelar',
+    edit: 'Editar',
+    run: 'Rodar',
+    running: 'rodando…',
+    ran: 'rodou',
+    exitCode: 'exit',
+    timedOut: 'travou no timeout',
+    showOutput: 'ver output',
+    hideOutput: 'esconder output',
+    noOutput: '(sem output)',
   },
 
   bubble: {
@@ -561,6 +596,23 @@ export const ES: StringDict = {
     attached_file: 'leyó el archivo',
     list_folder: 'listó la carpeta',
     read_file: 'leyó el archivo',
+    run_command: 'ejecutó comando',
+  },
+
+  shell: {
+    wantsToRun: 'quiere ejecutar un comando',
+    cwdLabel: 'carpeta',
+    homeDir: 'directorio home',
+    cancel: 'Cancelar',
+    edit: 'Editar',
+    run: 'Ejecutar',
+    running: 'ejecutando…',
+    ran: 'ejecutó',
+    exitCode: 'exit',
+    timedOut: 'timeout alcanzado',
+    showOutput: 'ver output',
+    hideOutput: 'ocultar output',
+    noOutput: '(sin output)',
   },
 
   bubble: {

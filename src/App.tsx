@@ -7,6 +7,8 @@ import { AttachmentChip } from './components/AttachmentChip';
 import { AttachPicker } from './components/AttachPicker';
 import { AgentOverlay } from './components/AgentOverlay';
 import { AgentSelector } from './components/AgentSelector';
+import { CommandApprovalCard } from './components/CommandApprovalCard';
+import { usePendingApprovals, resolveApproval, clearAllApprovals } from './services/run-command-bridge';
 import type { AgentDTO } from '@shared/ipc-types';
 import { useConversation } from './state/conversation';
 import { chatWithSkills } from './services/claude';
@@ -125,7 +127,12 @@ export default function App() {
     setAgentEvents([]);
     setAgentRunning(false);
     setShowAttachPicker(false);
+    // Any pending shell-command approval cards get auto-cancelled — releases
+    // the agent's tool call so it doesn't hang on the API side.
+    clearAllApprovals();
   };
+
+  const approvals = usePendingApprovals();
 
   useEffect(() => {
     const handler = () => wake();
@@ -345,6 +352,17 @@ export default function App() {
             <div style={{ marginTop: 6 }}>
               {conv.attachedPaths.map((p) => (
                 <AttachmentChip key={p.id} attachedPath={p} onRemove={() => conv.removeAttachedPath(p.id)} />
+              ))}
+            </div>
+          )}
+          {approvals.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {approvals.map((a) => (
+                <CommandApprovalCard
+                  key={a.id}
+                  approval={a}
+                  onResolve={(decision) => resolveApproval(a.id, decision)}
+                />
               ))}
             </div>
           )}
