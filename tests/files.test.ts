@@ -185,3 +185,12 @@ describe('readFile image', () => {
     }
   });
 });
+
+describe('readFile unsupported', () => {
+  it('throws on unknown binary formats', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-bin-'));
+    const p = join(root, 'archive.zip');
+    writeFileSync(p, Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+    await expect(readFile(p)).rejects.toThrow(/unsupported binary/i);
+  });
+});
