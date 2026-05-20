@@ -208,11 +208,21 @@ export async function chatWithSkills(
         try {
           const result = await executeTool(tu.name, tu.input);
           callbacks.onToolResult?.(tu.name, result);
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: tu.id,
-            content: result.content,
-          });
+          if (result.imageResult) {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: tu.id,
+              content: [
+                { type: 'image', source: { type: 'base64', media_type: result.imageResult.mimeType, data: result.imageResult.base64 } },
+              ],
+            } as Anthropic.ToolResultBlockParam);
+          } else {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: tu.id,
+              content: result.content,
+            });
+          }
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'erro';
           toolResults.push({

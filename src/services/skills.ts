@@ -37,6 +37,31 @@ export const TOOLS: ToolDef[] = [
       required: ['fact'],
     },
   },
+  {
+    name: 'list_folder',
+    description:
+      'Lista arquivos e subpastas dentro de uma pasta que o usuário anexou. Use ANTES de read_file quando precisar saber o que tem. Já filtra ruído (.git, node_modules, dist, lock files, e .gitignore se existir). Limite: 200 entradas por chamada.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Caminho absoluto da pasta. Deve estar dentro de algo que o usuário anexou.' },
+        recursive: { type: 'boolean', description: 'Se true, desce em subpastas até 5 níveis.' },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'read_file',
+    description:
+      'Lê o conteúdo de um arquivo (texto/código/PDF/DOCX/imagem). Para imagens você recebe um bloco image que pode analisar diretamente. Limites: 200KB texto, 5MB PDF, 2MB DOCX, 1MB imagem — acima disso vem truncado com sufixo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Caminho absoluto do arquivo. Deve estar dentro do escopo anexado.' },
+      },
+      required: ['path'],
+    },
+  },
 ];
 
 export interface ToolResult {
@@ -45,6 +70,8 @@ export interface ToolResult {
   sideEffect?: 'pasted' | 'memory_saved';
   // Se a tool produz texto que o Claude deve usar no contexto da resposta.
   text?: string;
+  // Se a tool retorna uma imagem (ex: read_file de PNG/JPG), o tool_result vira um bloco image.
+  imageResult?: { base64: string; mimeType: string };
 }
 
 // In-memory cache, refreshed at session start
@@ -94,6 +121,27 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       await invoke('memories:add', fact);
       await refreshMemoriesCache();
       return { content: `Memória salva: "${fact}"`, sideEffect: 'memory_saved' };
+    }
+    case 'list_folder': {
+      const path = String(input.path ?? '');
+      const recursive = Boolean(input.recursive);
+      const r = await invoke('files:list-folder', { path, recursive });
+      if (!r.ok) return { content: `error: ${r.error}` };
+      return { content: JSON.stringify(r.listing) };
+    }
+    case 'read_file': {
+      const path = String(input.path ?? '');
+      const r = await invoke('files:read-file', { path });
+      if (!r.ok) return { content: `error: ${r.error}` };
+      const c = r.content;
+      if (c.kind === 'image') {
+        // Image result: build a tool_result content array with an image block
+        return {
+          content: '[image attached]', // fallback for non-image-aware sinks
+          imageResult: { base64: c.base64, mimeType: c.mimeType },
+        };
+      }
+      return { content: c.text };
     }
     default:
       return { content: `Tool desconhecida: ${name}` };
