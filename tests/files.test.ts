@@ -110,3 +110,40 @@ describe('listFolder .gitignore', () => {
     expect(names).not.toContain('secrets/key.txt');
   });
 });
+
+describe('readFile text', () => {
+  it('reads a small text file as kind=text', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-rf-'));
+    const p = join(root, 'note.md');
+    writeFileSync(p, '# hello\nworld');
+    const out = await readFile(p);
+    expect(out.kind).toBe('text');
+    if (out.kind === 'text') {
+      expect(out.text).toContain('hello');
+      expect(out.bytesRead).toBe(13);
+      expect(out.truncated).toBe(false);
+    }
+  });
+
+  it('truncates text larger than maxBytesText with a suffix', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-big-'));
+    const p = join(root, 'big.txt');
+    const big = 'x'.repeat(300 * 1024); // 300KB > 200KB default
+    writeFileSync(p, big);
+    const out = await readFile(p);
+    if (out.kind !== 'text') throw new Error('expected text');
+    expect(out.truncated).toBe(true);
+    expect(out.bytesRead).toBeLessThan(big.length);
+    expect(out.text.endsWith('[truncated, total 307200 bytes]')).toBe(true);
+  });
+
+  it('accepts an explicit maxBytes override', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-mb-'));
+    const p = join(root, 'short.txt');
+    writeFileSync(p, '0123456789');
+    const out = await readFile(p, { maxBytes: 4 });
+    if (out.kind !== 'text') throw new Error('expected text');
+    expect(out.text.startsWith('0123')).toBe(true);
+    expect(out.truncated).toBe(true);
+  });
+});

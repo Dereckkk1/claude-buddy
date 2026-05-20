@@ -125,9 +125,62 @@ export async function listFolder(
   return { path: rootPath, entries, truncated: !keepGoing };
 }
 
+const TEXT_EXTS = new Set([
+  'txt','md','json','yaml','yml','toml','xml','csv','log','html','css','scss','sass',
+  'js','jsx','ts','tsx','mjs','cjs',
+  'py','rb','rs','go','java','kt','swift','c','cc','cpp','h','hpp','cs','php','sh','bash','zsh','ps1',
+  'sql','env','ini','conf','dockerfile','gitignore','editorconfig',
+]);
+const IMAGE_EXTS = new Set(['png','jpg','jpeg','gif','webp','bmp']);
+const PDF_EXT = 'pdf';
+const DOCX_EXT = 'docx';
+
+type Kind = 'text' | 'pdf' | 'docx' | 'image' | 'unsupported';
+
+function routeReader(filePath: string): Kind {
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  // Files like "Dockerfile" with no extension still readable as text if the basename hints
+  const base = path.basename(filePath).toLowerCase();
+  if (!ext && (base === 'dockerfile' || base === 'makefile' || base === 'readme')) return 'text';
+  if (TEXT_EXTS.has(ext)) return 'text';
+  if (ext === PDF_EXT) return 'pdf';
+  if (ext === DOCX_EXT) return 'docx';
+  if (IMAGE_EXTS.has(ext)) return 'image';
+  return 'unsupported';
+}
+
+function truncatedSuffix(totalBytes: number): string {
+  return `\n\n[truncated, total ${totalBytes} bytes]`;
+}
+
+async function readTextFile(filePath: string, maxBytes: number): Promise<FileContentText> {
+  const stat = await fs.stat(filePath);
+  const cap = Math.min(stat.size, maxBytes);
+  const buf = Buffer.alloc(cap);
+  const fh = await fs.open(filePath, 'r');
+  try {
+    await fh.read(buf, 0, cap, 0);
+  } finally {
+    await fh.close();
+  }
+  const truncated = stat.size > cap;
+  const text = truncated
+    ? buf.toString('utf8') + truncatedSuffix(stat.size)
+    : buf.toString('utf8');
+  return { path: filePath, kind: 'text', text, bytesRead: cap, truncated };
+}
+
 export async function readFile(
-  _filePath: string,
-  _opts: { maxBytes?: number } = {},
+  filePath: string,
+  opts: { maxBytes?: number } = {},
 ): Promise<FileContent> {
+  const kind = routeReader(filePath);
+  if (kind === 'unsupported') {
+    throw new Error(`unsupported binary format (${path.extname(filePath) || 'no ext'})`);
+  }
+  if (kind === 'text') {
+    return readTextFile(filePath, opts.maxBytes ?? LIMITS.maxBytesText);
+  }
+  // pdf/docx/image: stubs filled by Tasks 6/7/8
   throw new Error('not implemented');
 }
