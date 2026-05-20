@@ -194,3 +194,55 @@ describe('readFile unsupported', () => {
     await expect(readFile(p)).rejects.toThrow(/unsupported binary/i);
   });
 });
+
+import { pathIsWithin } from '../electron/files';
+import { sep } from 'node:path';
+
+describe('pathIsWithin (scope guard)', () => {
+  it('returns false when roots is empty', () => {
+    expect(pathIsWithin('/anywhere', [])).toBe(false);
+  });
+
+  it('returns true when target equals a root', () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-scope-'));
+    expect(pathIsWithin(root, [root])).toBe(true);
+  });
+
+  it('returns true when target is a child of a root', () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-scope-'));
+    writeFileSync(join(root, 'a.txt'), '');
+    expect(pathIsWithin(join(root, 'a.txt'), [root])).toBe(true);
+  });
+
+  it('returns true for nested children', () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-scope-'));
+    mkdirSync(join(root, 'sub'));
+    writeFileSync(join(root, 'sub', 'b.txt'), '');
+    expect(pathIsWithin(join(root, 'sub', 'b.txt'), [root])).toBe(true);
+  });
+
+  it('returns false for siblings outside any root', () => {
+    const a = mkdtempSync(join(tmpdir(), 'cb-a-'));
+    const b = mkdtempSync(join(tmpdir(), 'cb-b-'));
+    writeFileSync(join(b, 'leaked.txt'), '');
+    expect(pathIsWithin(join(b, 'leaked.txt'), [a])).toBe(false);
+  });
+
+  it('does NOT confuse path prefixes (e.g. /foo vs /foobar)', () => {
+    // Both folders share a prefix string but are different roots
+    const base = mkdtempSync(join(tmpdir(), 'cb-pfx-'));
+    const foo = join(base, 'foo');
+    const foobar = join(base, 'foobar');
+    mkdirSync(foo);
+    mkdirSync(foobar);
+    writeFileSync(join(foobar, 'x.txt'), '');
+    // foobar/x.txt must NOT be considered inside the [foo] scope
+    expect(pathIsWithin(join(foobar, 'x.txt'), [foo])).toBe(false);
+  });
+
+  it('uses path.sep as boundary', () => {
+    // Sanity: trailing separator behavior
+    const root = mkdtempSync(join(tmpdir(), 'cb-sep-'));
+    expect(pathIsWithin(root + sep, [root])).toBe(true);
+  });
+});

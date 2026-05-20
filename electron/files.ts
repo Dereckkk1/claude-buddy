@@ -210,7 +210,7 @@ async function readDocxFile(filePath: string, maxBytes: number): Promise<FileCon
   const fh = await fs.open(filePath, 'r');
   try { await fh.read(buf, 0, cap, 0); } finally { await fh.close(); }
   const mammothMod = await import('mammoth');
-  const mammoth = (mammothMod as { default?: typeof mammothMod }).default ?? mammothMod;
+  const mammoth = (mammothMod as unknown as { default?: typeof mammothMod }).default ?? mammothMod;
   const result = await (mammoth as { extractRawText: (i: { buffer: Buffer }) => Promise<{ value: string }> })
     .extractRawText({ buffer: buf });
   const truncated = stat.size > cap;
@@ -248,4 +248,18 @@ export async function readFile(
   if (kind === 'docx') return readDocxFile(filePath, opts.maxBytes ?? LIMITS.maxBytesDocx);
   if (kind === 'image') return readImageFile(filePath, opts.maxBytes ?? LIMITS.maxBytesImage);
   throw new Error('not implemented');
+}
+
+/**
+ * True if `target` resolves to a location equal to or beneath one of `roots`.
+ * Compares resolved absolute paths to avoid `..` escapes.
+ * Used by the main process to gate filesystem tool calls to user-attached scope.
+ */
+export function pathIsWithin(target: string, roots: string[]): boolean {
+  if (!roots.length) return false;
+  const t = path.resolve(target);
+  return roots.some(root => {
+    const r = path.resolve(root);
+    return t === r || t.startsWith(r + path.sep);
+  });
 }

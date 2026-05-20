@@ -1,5 +1,8 @@
-import { app, BrowserWindow, session, screen } from 'electron';
+import { app, BrowserWindow, session, screen, dialog } from 'electron';
 import path from 'node:path';
+import { stat as fsStat } from 'node:fs/promises';
+import { basename, resolve as resolvePath } from 'node:path';
+import { listFolder, readFile as readFileFs, pathIsWithin } from './files';
 import { createMascotWindow } from './window-manager';
 import { registerHandlers } from './ipc';
 import {
@@ -28,6 +31,7 @@ import { setupAutoUpdater } from './updater';
 let mascotWin: BrowserWindow | null = null;
 let configWin: BrowserWindow | null = null;
 let settingsWin: BrowserWindow | null = null;
+let attachedScope: string[] = []; // absolute paths the user has explicitly attached
 const isDev = !app.isPackaged;
 const startHidden = process.argv.includes('--hidden');
 
@@ -188,6 +192,48 @@ function bootstrap() {
     'agent:scroll': ({ x, y, direction, amount }) => scroll(x, y, direction, amount),
     'agent:cursor-position': () => cursorPosition(),
     'file:pick-and-parse': () => pickAndParseFile(),
+    'files:set-scope': (paths) => {
+      attachedScope = paths.map(p => resolvePath(p));
+    },
+    'files:list-folder': async ({ path: p, recursive }) => {
+      if (!pathIsWithin(p, attachedScope)) return { ok: false, error: `path not in attached scope: ${p}` };
+      try {
+        const listing = await listFolder(p, { recursive });
+        return { ok: true, listing };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'list failed' };
+      }
+    },
+    'files:read-file': async ({ path: p }) => {
+      if (!pathIsWithin(p, attachedScope)) return { ok: false, error: `path not in attached scope: ${p}` };
+      try {
+        const content = await readFileFs(p);
+        return { ok: true, content };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'read failed' };
+      }
+    },
+    'files:pick-folder': async () => {
+      const r = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      const p = r.filePaths[0];
+      const s = await fsStat(p).catch(() => null);
+      return { path: p, name: basename(p), size: s?.size ?? 0 };
+    },
+    'files:resolve-dropped': async (paths) => {
+      const out = [] as Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;
+      for (const p of paths) {
+        const s = await fsStat(p).catch(() => null);
+        if (!s) continue;
+        out.push({
+          path: p,
+          kind: s.isDirectory() ? 'folder' : 'file',
+          name: basename(p),
+          size: s.isDirectory() ? 0 : s.size,
+        });
+      }
+      return out;
+    },
     'memories:list': () => getActiveAgent().memories,
     'memories:add': (fact) => addMemoryToAgent(getActiveAgent().id, fact),
     'memories:delete': (i) => deleteMemoryFromAgent(getActiveAgent().id, i),
