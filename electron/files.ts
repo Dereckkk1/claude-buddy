@@ -153,6 +153,28 @@ function truncatedSuffix(totalBytes: number): string {
   return `\n\n[truncated, total ${totalBytes} bytes]`;
 }
 
+async function readPdfFile(filePath: string, maxBytes: number): Promise<FileContentText> {
+  const stat = await fs.stat(filePath);
+  if (stat.size === 0) throw new Error('empty file');
+  // pdf-parse expects a Buffer/Uint8Array via the `data` LoadParameter
+  const cap = Math.min(stat.size, maxBytes);
+  const buf = Buffer.alloc(cap);
+  const fh = await fs.open(filePath, 'r');
+  try { await fh.read(buf, 0, cap, 0); } finally { await fh.close(); }
+  // Dynamic import keeps Vitest happy with pdf-parse's CJS side-effects.
+  // pdf-parse v2 ships a `PDFParse` class; instantiate with `{ data: Uint8Array }`
+  // and call `getText()`.
+  const pdfParseMod = await import('pdf-parse');
+  const { PDFParse } = pdfParseMod as unknown as {
+    PDFParse: new (opts: { data: Uint8Array }) => { getText(): Promise<{ text: string }> };
+  };
+  const parser = new PDFParse({ data: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength) });
+  const parsed = await parser.getText();
+  const truncated = stat.size > cap;
+  const text = truncated ? parsed.text + truncatedSuffix(stat.size) : parsed.text;
+  return { path: filePath, kind: 'text', text, bytesRead: cap, truncated };
+}
+
 async function readTextFile(filePath: string, maxBytes: number): Promise<FileContentText> {
   const stat = await fs.stat(filePath);
   const cap = Math.min(stat.size, maxBytes);
@@ -178,9 +200,8 @@ export async function readFile(
   if (kind === 'unsupported') {
     throw new Error(`unsupported binary format (${path.extname(filePath) || 'no ext'})`);
   }
-  if (kind === 'text') {
-    return readTextFile(filePath, opts.maxBytes ?? LIMITS.maxBytesText);
-  }
-  // pdf/docx/image: stubs filled by Tasks 6/7/8
+  if (kind === 'text') return readTextFile(filePath, opts.maxBytes ?? LIMITS.maxBytesText);
+  if (kind === 'pdf')  return readPdfFile(filePath,  opts.maxBytes ?? LIMITS.maxBytesPdf);
+  // docx/image: stubs filled by Tasks 7/8
   throw new Error('not implemented');
 }

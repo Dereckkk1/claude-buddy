@@ -147,3 +147,16 @@ describe('readFile text', () => {
     expect(out.truncated).toBe(true);
   });
 });
+
+import { resolve as resolvePath } from 'node:path';
+
+describe('readFile pdf', () => {
+  it('parses a PDF and returns kind=text with the extracted text', async () => {
+    const fixture = resolvePath(__dirname, 'fixtures/sample.pdf');
+    const out = await readFile(fixture);
+    expect(out.kind).toBe('text');
+    if (out.kind === 'text') {
+      expect(out.text).toMatch(/Claude Buddy PDF fixture/i);
+    }
+  });
+});
