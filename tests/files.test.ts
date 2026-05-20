@@ -93,3 +93,20 @@ describe('listFolder recursive + limits', () => {
     expect(out.truncated).toBe(true);
   });
 });
+
+describe('listFolder .gitignore', () => {
+  it('respects .gitignore at the root', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cb-gi-'));
+    writeFileSync(join(root, '.gitignore'), 'secrets/\n*.bak\n');
+    writeFileSync(join(root, 'README.md'), '');
+    writeFileSync(join(root, 'note.bak'), '');
+    mkdirSync(join(root, 'secrets'));
+    writeFileSync(join(root, 'secrets', 'key.txt'), '');
+    const out = await listFolder(root, { recursive: true });
+    const names = out.entries.map(e => e.name);
+    expect(names).toContain('README.md');
+    expect(names).not.toContain('note.bak');
+    expect(names).not.toContain('secrets');
+    expect(names).not.toContain('secrets/key.txt');
+  });
+});

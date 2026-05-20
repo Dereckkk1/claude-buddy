@@ -77,12 +77,22 @@ function matches(ig: Ignore, name: string, isFolder: boolean): boolean {
   return ig.ignores(probe);
 }
 
+async function readGitignoreLines(rootPath: string): Promise<string[]> {
+  try {
+    const text = await fs.readFile(path.join(rootPath, '.gitignore'), 'utf8');
+    return text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  } catch {
+    return [];
+  }
+}
+
 export async function listFolder(
   rootPath: string,
   opts: { recursive?: boolean; maxEntries?: number } = {},
 ): Promise<FolderListing> {
   const maxEntries = opts.maxEntries ?? LIMITS.maxEntries;
-  const ig = buildIgnoreMatcher();
+  const giLines = await readGitignoreLines(rootPath);
+  const ig = buildIgnoreMatcher(giLines);
   const entries: FolderEntry[] = [];
 
   async function walk(currentPath: string, relPrefix: string, depth: number): Promise<boolean> {
