@@ -76,7 +76,7 @@ export function MCPTab() {
       </div>
       <p className="settings-help-top">{t('settings.mcp.help')}</p>
       {configs.length === 0 ? (
-        <div className="empty">{t('settings.mcp.noServers')}</div>
+        <div className="mcp-empty-card">{t('settings.mcp.noServers')}</div>
       ) : (
         <ul className="agent-list">
           {configs.map((c) => {

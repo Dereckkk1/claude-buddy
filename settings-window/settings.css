@@ -304,3 +304,84 @@ select option { background: var(--bg-elevated); color: var(--ink); }
   font-size: 12px;
   line-height: 1.4;
 }
+
+/* ── About card (product-ui-style) ────────────────────────────────────────── */
+.about-card {
+  background: var(--bg-elevated, #ffffff);
+  border: 1px solid var(--border, #e8e6dc);
+  border-radius: 16px;
+  padding: 28px 32px;
+  margin-top: 8px;
+  max-width: 520px;
+}
+.about-version {
+  font-family: "Tiempos Headline", "Lora", Georgia, "Times New Roman", serif;
+  font-size: 22px;
+  color: var(--ink, #141413);
+  margin-bottom: 6px;
+}
+.about-tagline {
+  font-size: 14px;
+  color: var(--ink-soft, #b0aea5);
+  margin: 0 0 18px 0;
+}
+.about-divider {
+  border: none;
+  border-top: 1px solid var(--border, #e8e6dc);
+  margin: 0 0 18px 0;
+}
+.about-meta {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  row-gap: 10px;
+  column-gap: 16px;
+  margin: 0 0 18px 0;
+  font-size: 13px;
+}
+.about-meta dt {
+  color: var(--ink-soft, #b0aea5);
+  font-weight: 500;
+}
+.about-meta dd {
+  margin: 0;
+  color: var(--ink, #141413);
+}
+.about-meta a {
+  color: var(--ink, #141413);
+  text-decoration: none;
+  border-bottom: 1px solid var(--clay, #d97757);
+  padding-bottom: 1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.about-meta a:hover {
+  color: var(--clay, #d97757);
+}
+.about-built {
+  font-size: 12px;
+  color: var(--ink-soft, #b0aea5);
+  margin: 0;
+  font-style: italic;
+}
+
+/* ── MCP servers tab refinements (product-ui-style) ─────────────────────── */
+.mcp-empty-card {
+  background: var(--bg-elevated, #ffffff);
+  border: 1px solid var(--border, #e8e6dc);
+  border-radius: 16px;
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--ink-soft, #b0aea5);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+/* MCP server list rows — already use .agent-list, just tweak the prefix tag */
+.agent-list-tag {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  background: rgba(216, 213, 200, 0.4);
+  color: var(--ink-soft, #b0aea5);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 400;
+}

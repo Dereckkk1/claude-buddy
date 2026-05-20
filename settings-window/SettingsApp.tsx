@@ -215,9 +215,22 @@ export function SettingsApp() {
         {tab === 'about' && (
           <>
             <h2>{t('settings.about.heading')}</h2>
-            <p>{t('settings.about.version')}</p>
-            <p>{t('settings.about.tagline')}</p>
-            <p className="setting-help">{t('settings.about.built')}</p>
+            <div className="about-card">
+              <div className="about-version">{t('settings.about.version')}</div>
+              <p className="about-tagline">{t('settings.about.tagline')}</p>
+              <hr className="about-divider" />
+              <dl className="about-meta">
+                <dt>{t('settings.about.authorLabel')}</dt>
+                <dd>{t('settings.about.authorName')}</dd>
+                <dt>{t('settings.about.repoLabel')}</dt>
+                <dd>
+                  <a href={t('settings.about.repoUrl')} target="_blank" rel="noreferrer">
+                    {t('settings.about.repoUrl').replace('https://', '')}
+                  </a>
+                </dd>
+              </dl>
+              <p className="about-built">{t('settings.about.built')}</p>
+            </div>
           </>
         )}
       </div>

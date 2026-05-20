@@ -4,12 +4,82 @@
     <meta charset="UTF-8" />
     <title>Claude Buddy — Config</title>
     <style>
-      body { font-family: 'Segoe UI', system-ui; background: #1a1a2e; color: #fff; padding: 24px; margin: 0; }
-      h1 { color: #ff6b35; margin-top: 0; font-size: 18px; }
-      input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; font-family: monospace; }
-      button { background: #ff6b35; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 12px; }
-      a { color: #ff6b35; }
-      .small { font-size: 12px; color: #aaa; margin-top: 8px; }
+      :root {
+        --clay: #d97757;
+        --paper: #faf9f5;
+        --ink: #141413;
+        --ink-soft: #b0aea5;
+        --border: #e8e6dc;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body {
+        font-family: "Styrene", "Inter", -apple-system, system-ui, "Segoe UI", Arial, sans-serif;
+        background: var(--paper);
+        color: var(--ink);
+        padding: 36px 40px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      h1 {
+        font-family: "Tiempos Headline", "Lora", Georgia, "Times New Roman", serif;
+        font-size: 26px;
+        font-weight: 500;
+        line-height: 1.2;
+        color: var(--ink);
+        margin: 0 0 14px 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      h1::before {
+        content: "✷";
+        color: var(--clay);
+        font-size: 22px;
+        font-weight: 700;
+      }
+      p.small {
+        font-size: 13px;
+        color: var(--ink-soft);
+        margin: 0 0 24px 0;
+      }
+      p.small a {
+        color: var(--ink);
+        text-decoration: none;
+        border-bottom: 1px solid var(--clay);
+        padding-bottom: 1px;
+      }
+      p.small a:hover { color: var(--clay); }
+      input[type="password"] {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: #ffffff;
+        color: var(--ink);
+        font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      input[type="password"]::placeholder { color: var(--ink-soft); }
+      input[type="password"]:focus { border-color: var(--clay); box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.15); }
+      button {
+        background: var(--ink);
+        color: #ffffff;
+        border: none;
+        padding: 11px 22px;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 14px;
+        font-family: inherit;
+        cursor: pointer;
+        margin-top: 18px;
+        transition: background 0.15s, transform 0.05s;
+      }
+      button:hover:not(:disabled) { background: #2a2a28; }
+      button:active:not(:disabled) { transform: translateY(1px); }
+      button:disabled { background: var(--border); color: var(--ink-soft); cursor: not-allowed; }
     </style>
   </head>
   <body>

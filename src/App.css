@@ -536,7 +536,12 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
   font-size: 12px;
   font-family: "SF Mono", Menlo, Consolas, monospace;
 }
-.agent-log-row { padding: 3px 0; color: var(--ink-soft); }
+.agent-log-row { padding: 3px 0; color: var(--ink-soft); display: flex; gap: 6px; align-items: baseline; }
+.agent-log-icon { flex-shrink: 0; opacity: 0.7; }
+.agent-log-msg { flex: 1; min-width: 0; word-wrap: break-word; overflow-wrap: anywhere; }
+.agent-log-msg strong { font-weight: 600; color: var(--ink); }
+.agent-log-msg em { font-style: italic; }
+.agent-log-msg code { font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px; background: rgba(216,213,200,0.4); padding: 0 4px; border-radius: 3px; }
 .agent-log-action { color: var(--ink); }
 .agent-log-thought { color: var(--ink-soft); font-style: italic; }
 .agent-log-error { color: #c0392b; }

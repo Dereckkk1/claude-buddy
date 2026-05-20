@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { AgentEvent } from '@/services/agent';
 import { useT } from '@/i18n';
 
@@ -28,7 +30,24 @@ export function AgentOverlay({ status, events, onStop }: Props) {
       <div className="agent-log" ref={logRef}>
         {events.map((e, i) => (
           <div key={i} className={`agent-log-row agent-log-${e.type}`}>
-            {iconFor(e.type)} {e.message}
+            <span className="agent-log-icon">{iconFor(e.type)}</span>
+            <span className="agent-log-msg">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                // Inline-only — no <p>/<h1>/etc wrapping. Each log row is a single
+                // line; let bold/italic/code render but skip block-level wrapping.
+                components={{
+                  p: ({ children }) => <>{children}</>,
+                  h1: ({ children }) => <strong>{children}</strong>,
+                  h2: ({ children }) => <strong>{children}</strong>,
+                  h3: ({ children }) => <strong>{children}</strong>,
+                  ul: ({ children }) => <>{children}</>,
+                  li: ({ children }) => <>{children}</>,
+                }}
+              >
+                {e.message}
+              </ReactMarkdown>
+            </span>
           </div>
         ))}
       </div>
