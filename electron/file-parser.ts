@@ -44,18 +44,20 @@ export async function parseFile(filePath: string): Promise<ParsedAttachment> {
     return { kind: 'image', mimeType: IMAGE_EXTS[ext], base64: buf.toString('base64') };
   }
 
-  // PDF
+  // PDF — uses unpdf (serverless pdfjs port, no Web Worker needed in main).
+  // pdf-parse v2 internally pulls a worker that vite-plugin-electron can't
+  // bundle into dist-electron/, so we avoid it entirely.
   if (ext === '.pdf') {
     try {
-      const pdfModule = await import('pdf-parse');
-      const pdfParse = (pdfModule as unknown as { default?: typeof pdfModule } & typeof pdfModule).default
-        ?? (pdfModule as unknown as (b: Buffer) => Promise<{ text: string }>);
+      const { extractText, getDocumentProxy } = await import('unpdf');
       const buf = await fs.readFile(filePath);
-      const parsed = await (pdfParse as (b: Buffer) => Promise<{ text: string }>)(buf);
-      return { kind: 'text', content: `[PDF: ${fileName}]\n\n${parsed.text.trim()}` };
+      const pdf = await getDocumentProxy(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
+      const { text } = await extractText(pdf, { mergePages: true });
+      const fullText = Array.isArray(text) ? text.join('\n') : text;
+      return { kind: 'text', content: `[PDF: ${fileName}]\n\n${fullText.trim()}` };
     } catch (e) {
       console.error('[file-parser] pdf failed:', e);
-      return { kind: 'text', content: `[PDF: ${fileName}] (não consegui extrair texto)` };
+      return { kind: 'text', content: `[PDF: ${fileName}] (não consegui extrair texto: ${e instanceof Error ? e.message : 'erro'})` };
     }
   }
 
