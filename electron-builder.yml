@@ -2,6 +2,9 @@ appId: com.dereck.claudebuddy
 productName: Claude Buddy
 directories:
   output: release
+# Don't rebuild native modules — bufferutil/utf-8-validate are optional perf
+# deps of `ws` (msedge-tts); the JS fallback works fine.
+npmRebuild: false
 files:
   - dist/**/*
   - dist-electron/**/*

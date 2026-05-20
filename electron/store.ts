@@ -8,6 +8,8 @@ interface Schema {
   settings?: AppSettings;
 }
 
+export type Locale = 'en' | 'pt' | 'es';
+
 export interface AppSettings {
   autostart: boolean;
   idleTimeoutMs: number;
@@ -18,6 +20,7 @@ export interface AppSettings {
   theme: 'light' | 'dark' | 'auto';
   soundsEnabled: boolean;
   soundsVolume: number;
+  locale: Locale;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -25,11 +28,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   idleTimeoutMs: 30_000,
   hotkey: 'CommandOrControl+Shift+Space',
   ttsEnabled: false,
-  ttsVoice: 'pt-BR-FranciscaNeural',
+  ttsVoice: 'en-US-JennyNeural',
   ttsRate: 1.25,
   theme: 'auto',
   soundsEnabled: true,
   soundsVolume: 0.1,
+  locale: 'en',
 };
 
 const encryptionKey = machineIdSync(true).slice(0, 32);

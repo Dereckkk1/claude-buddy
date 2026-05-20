@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@/services/ipc';
 import { playPrint } from '@/services/sounds';
+import { useT } from '@/i18n';
 import type { Attachment } from '@/state/conversation';
 
 interface Props {
@@ -15,6 +16,7 @@ interface ClipboardItem {
 }
 
 export function AttachPicker({ onAttach, onClose }: Props) {
+  const t = useT();
   const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
   const [showClipboard, setShowClipboard] = useState(false);
 
@@ -42,7 +44,7 @@ export function AttachPicker({ onAttach, onClose }: Props) {
     } else if (data?.kind === 'image') {
       items.push({
         kind: 'image',
-        preview: `imagem (${Math.round(data.base64.length * 0.75 / 1024)}KB)`,
+        preview: t('attach.imageSize', { kb: Math.round(data.base64.length * 0.75 / 1024) }),
         data,
       });
     }
@@ -62,29 +64,29 @@ export function AttachPicker({ onAttach, onClose }: Props) {
           <button className="attach-option" onClick={handleScreenshot}>
             <span className="attach-option-icon">▣</span>
             <div>
-              <div className="attach-option-title">Print de tela</div>
-              <div className="attach-option-sub">selecione uma região</div>
+              <div className="attach-option-title">{t('attach.screenshot')}</div>
+              <div className="attach-option-sub">{t('attach.screenshotSub')}</div>
             </div>
           </button>
           <button className="attach-option" onClick={handleClipboardOpen}>
             <span className="attach-option-icon">▤</span>
             <div>
-              <div className="attach-option-title">Clipboard</div>
-              <div className="attach-option-sub">o que está copiado agora</div>
+              <div className="attach-option-title">{t('attach.clipboard')}</div>
+              <div className="attach-option-sub">{t('attach.clipboardSub')}</div>
             </div>
           </button>
           <button className="attach-option" onClick={handleFile}>
             <span className="attach-option-icon">▢</span>
             <div>
-              <div className="attach-option-title">Arquivo</div>
-              <div className="attach-option-sub">PDF, MD, TXT, DOCX, imagem</div>
+              <div className="attach-option-title">{t('attach.file')}</div>
+              <div className="attach-option-sub">{t('attach.fileSub')}</div>
             </div>
           </button>
         </>
       ) : clipboardItems.length === 0 ? (
         <div style={{ padding: '12px', color: 'var(--ink-soft)', fontSize: 12 }}>
-          clipboard vazio
-          <button className="cb-btn cb-btn-ghost" style={{ marginLeft: 8 }} onClick={() => setShowClipboard(false)}>voltar</button>
+          {t('attach.empty')}
+          <button className="cb-btn cb-btn-ghost" style={{ marginLeft: 8 }} onClick={() => setShowClipboard(false)}>{t('attach.back')}</button>
         </div>
       ) : (
         <>
@@ -92,12 +94,12 @@ export function AttachPicker({ onAttach, onClose }: Props) {
             <button key={i} className="attach-option" onClick={() => onAttach(item.data)}>
               <span className="attach-option-icon">{item.kind === 'image' ? '▣' : '“'}</span>
               <div>
-                <div className="attach-option-title">{item.kind === 'image' ? 'Imagem' : 'Texto'}</div>
+                <div className="attach-option-title">{item.kind === 'image' ? t('attach.imageItem') : t('attach.textItem')}</div>
                 <div className="attach-option-sub">{item.preview}</div>
               </div>
             </button>
           ))}
-          <button className="cb-btn cb-btn-ghost" style={{ marginTop: 6 }} onClick={() => setShowClipboard(false)}>voltar</button>
+          <button className="cb-btn cb-btn-ghost" style={{ marginTop: 6 }} onClick={() => setShowClipboard(false)}>{t('attach.back')}</button>
         </>
       )}
     </div>

@@ -1,35 +1,57 @@
 import { Tray, Menu, app, BrowserWindow, nativeImage } from 'electron';
 import path from 'node:path';
+import { translate } from '../shared/i18n-strings';
+import { getSettings } from './store';
 
 let tray: Tray | null = null;
+// Cached callbacks so refreshTrayMenu() can rebuild the menu using the
+// current locale without the caller having to pass them in again.
+let cachedGetMascotWin: (() => BrowserWindow | null) | null = null;
+let cachedOpenConfig: (() => void) | null = null;
+let cachedOpenSettings: (() => void) | null = null;
 
-export function createTray(
-  getMascotWin: () => BrowserWindow | null,
-  openConfig: () => void,
-  openSettings: () => void,
-) {
-  const iconPath = path.join(__dirname, '../assets/sprites/icon.png');
-  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
-  tray = new Tray(icon);
-  tray.setToolTip('Claude Buddy');
-
-  const menu = Menu.buildFromTemplate([
+function buildMenu(): Menu {
+  const locale = getSettings().locale;
+  const t = (key: string) => translate(locale, `tray.${key}`);
+  return Menu.buildFromTemplate([
     {
-      label: 'Acordar',
+      label: t('wake'),
       click: () => {
-        const win = getMascotWin();
+        const win = cachedGetMascotWin?.();
         if (!win) return;
         if (!win.isVisible()) win.show();
         win.focus();
         win.webContents.send('hotkey:activate');
       },
     },
-    { label: 'Settings…', click: openSettings },
-    { label: 'Configurar API key', click: openConfig },
+    { label: t('settings'), click: () => cachedOpenSettings?.() },
+    { label: t('configKey'), click: () => cachedOpenConfig?.() },
     { type: 'separator' },
-    { label: 'Sair', click: () => app.quit() },
+    { label: t('quit'), click: () => app.quit() },
   ]);
-  tray.setContextMenu(menu);
+}
+
+export function createTray(
+  getMascotWin: () => BrowserWindow | null,
+  openConfig: () => void,
+  openSettings: () => void,
+) {
+  cachedGetMascotWin = getMascotWin;
+  cachedOpenConfig = openConfig;
+  cachedOpenSettings = openSettings;
+
+  const iconPath = path.join(__dirname, '../assets/sprites/icon.png');
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+  tray.setToolTip('Claude Buddy');
+  tray.setContextMenu(buildMenu());
+}
+
+// Rebuild the menu with the current locale. Call this when settings.locale
+// changes so the tray strings update without a relaunch.
+export function refreshTrayMenu(): void {
+  if (!tray) return;
+  tray.setContextMenu(buildMenu());
 }
 
 export function destroyTray() {

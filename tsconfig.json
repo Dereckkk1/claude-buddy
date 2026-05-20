@@ -21,6 +21,6 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["src", "shared", "tests", "config-window"],
+  "include": ["src", "shared", "tests", "config-window", "settings-window"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

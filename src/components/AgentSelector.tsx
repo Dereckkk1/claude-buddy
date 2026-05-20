@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@/services/ipc';
+import { useT } from '@/i18n';
 import type { AgentDTO } from '@shared/ipc-types';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function AgentSelector({ active, onChange }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [agents, setAgents] = useState<AgentDTO[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -47,7 +49,7 @@ export function AgentSelector({ active, onChange }: Props) {
             >
               <span>{a.emoji}</span>
               <span>{a.name}</span>
-              {a.isBuiltIn ? null : <span className="agent-selector-tag">custom</span>}
+              {a.isBuiltIn ? null : <span className="agent-selector-tag">{t('bubble.customTag')}</span>}
             </button>
           ))}
           <div className="agent-selector-sep" />
@@ -55,7 +57,7 @@ export function AgentSelector({ active, onChange }: Props) {
             className="agent-selector-item agent-selector-manage"
             onClick={async () => { await invoke('settings:open'); setOpen(false); }}
           >
-            ＋ Gerenciar agentes…
+            {t('bubble.manageAgents')}
           </button>
         </div>
       )}

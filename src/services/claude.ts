@@ -1,11 +1,21 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Message, Attachment } from '@/state/conversation';
-import type { AgentDTO } from '@shared/ipc-types';
+import type { AgentDTO, Locale } from '@shared/ipc-types';
+import { translate } from '@shared/i18n-strings';
 import { invoke } from './ipc';
+import { getLocale } from '@/i18n';
 import { TOOLS, executeTool, type ToolResult } from './skills';
 
 const HAIKU = 'claude-haiku-4-5-20251001';
 const SONNET = 'claude-sonnet-4-6';
+
+// Server-side tool — executed by Anthropic, not by us. We just pass it in `tools`
+// and the API handles the search + injects results into the conversation.
+const WEB_SEARCH_TOOL = {
+  type: 'web_search_20250305',
+  name: 'web_search',
+  max_uses: 3,
+} as const;
 
 export function pickModel(messages: Message[], attachments: Attachment[]): string {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
@@ -24,19 +34,41 @@ type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 
-const TOOL_INSTRUCTIONS = `Você tem acesso a 3 tools que pode chamar sempre que fizer sentido (mesmo se a personalidade abaixo não mencionar):
+function buildToolInstructions(locale: Locale): string {
+  const t = (k: string) => translate(locale, `toolInstructions.${k}`);
+  return [
+    t('intro'),
+    '',
+    t('goldenRuleHeader'),
+    '',
+    t('goldenRuleBody'),
+    '',
+    t('toolsHeader'),
+    '',
+    t('tool1'),
+    '',
+    t('tool2'),
+    '',
+    t('tool3'),
+    '',
+    t('tool4'),
+    '',
+    t('antiHeader'),
+    '',
+    t('antiBody'),
+    '',
+    t('closing'),
+  ].join('\n');
+}
 
-1. \`read_selection\`: pega o texto que o usuário tem SELECIONADO em outro app agora. Use quando ele falar "isso", "esse texto", "essa parte", "esse código" SEM ter anexado nada — provavelmente ele quer dizer o que está selecionado na tela.
-
-2. \`edit_in_place\`: substitui a seleção do usuário pelo texto novo (cola direto no app dele). Use quando o pedido for uma EDIÇÃO de texto que está selecionado em outro app: "corrige isso", "reescreve mais formal", "traduz pra inglês", "deixa mais curto". Não devolva o texto no chat — chama essa tool com o resultado, e no comentário diga em 1 frase o que fez.
-
-3. \`save_memory\`: grava 1 fato curto sobre o usuário pra futuras conversas. Use ESPARSAMENTE — só pra coisas relevantes ("usa Cursor", "trabalha com Python", "mora em Manaus", "prefere respostas curtas"). Não salve coisas triviais.
-
-Regras gerais: se o usuário anexou explicitamente algo, use isso. Senão e o pedido fizer referência a algo da tela, chame read_selection primeiro. Pra qualquer edição de texto, prefira edit_in_place em vez de devolver o texto no chat. Markdown OK no chat.`;
-
-function memoriesBlock(memories: string[]): string {
+function memoriesBlock(memories: string[], locale: Locale): string {
   if (memories.length === 0) return '';
-  return `\n\nMEMÓRIAS sobre o usuário (use quando relevante):\n${memories.map((f) => `- ${f}`).join('\n')}`;
+  const label = translate(locale, 'toolInstructions.memoriesLabel');
+  return `${label}\n${memories.map((f) => `- ${f}`).join('\n')}`;
+}
+
+function languageDirective(locale: Locale): string {
+  return translate(locale, 'systemPrompt.respondInLanguage');
 }
 
 function modelForAgent(agent: AgentDTO, messages: Message[], attachments: Attachment[]): string {
@@ -61,7 +93,7 @@ function attachmentsToBlocks(attachments: Attachment[]): ContentBlock[] {
         source: { type: 'base64', media_type: a.mimeType, data: a.base64 },
       });
     } else {
-      blocks.push({ type: 'text', text: `[Conteúdo anexado]\n${a.content}` });
+      blocks.push({ type: 'text', text: `[Attached content]\n${a.content}` });
     }
   }
   return blocks;
@@ -110,7 +142,15 @@ export async function chatWithSkills(
   callbacks.onModelPicked?.(model);
 
   const apiMessages: Anthropic.MessageParam[] = buildInitialMessages(messages, attachments);
-  const system = `${TOOL_INSTRUCTIONS}\n\n---\n\n${agent.systemPrompt}${memoriesBlock(agent.memories)}`;
+  const locale = getLocale();
+  const system = [
+    buildToolInstructions(locale),
+    '---',
+    languageDirective(locale),
+    '---',
+    agent.systemPrompt,
+    memoriesBlock(agent.memories, locale),
+  ].join('\n\n');
 
   for (let iter = 0; iter < 6; iter++) {
     try {
@@ -118,7 +158,7 @@ export async function chatWithSkills(
         model,
         max_tokens: 1024,
         system,
-        tools: TOOLS as never,
+        tools: [...TOOLS, WEB_SEARCH_TOOL] as never,
         messages: apiMessages as never,
       });
 
@@ -132,6 +172,11 @@ export async function chatWithSkills(
           if (event.content_block.type === 'tool_use') {
             currentTool = { id: event.content_block.id, name: event.content_block.name };
             currentToolJson = '';
+          } else if ((event.content_block as unknown as { type: string }).type === 'server_tool_use') {
+            // Server-side tool (web_search): Anthropic executes it. We only fire
+            // the UI indicator — no local execution, no tool_result to push back.
+            const block = event.content_block as unknown as { name: string };
+            callbacks.onToolUse?.(block.name, {});
           }
         } else if (event.type === 'content_block_delta') {
           if (event.delta.type === 'text_delta') {

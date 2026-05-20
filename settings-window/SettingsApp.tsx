@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '../src/services/ipc';
 import { useTheme } from '../src/hooks/useTheme';
+import { useT } from '../src/i18n';
 import { AgentsTab } from './AgentsTab';
-import type { AppSettingsDTO } from '@shared/ipc-types';
+import type { AppSettingsDTO, Locale } from '@shared/ipc-types';
 import './settings.css';
 
 type Tab = 'general' | 'agents' | 'memories' | 'about';
@@ -17,7 +18,14 @@ function VoicePicker({ value, onChange, disabled }: { value: string; onChange: (
   );
 }
 
+const LANGUAGES: { value: Locale; label: string }[] = [
+  { value: 'en', label: 'English' },
+  { value: 'pt', label: 'Português (BR)' },
+  { value: 'es', label: 'Español' },
+];
+
 export function SettingsApp() {
+  const t = useT();
   const [tab, setTab] = useState<Tab>('general');
   const [settings, setSettings] = useState<AppSettingsDTO | null>(null);
   const [memories, setMemories] = useState<string[]>([]);
@@ -38,44 +46,58 @@ export function SettingsApp() {
   return (
     <>
     <div className="settings-titlebar">
-      <span className="settings-titlebar-title">Claude Buddy — Settings</span>
-      <button className="settings-titlebar-close" onClick={() => window.close()} aria-label="fechar">×</button>
+      <span className="settings-titlebar-title">{t('settings.titleBar')}</span>
+      <button className="settings-titlebar-close" onClick={() => window.close()} aria-label={t('bubble.close')}>×</button>
     </div>
     <div className="settings-root">
       <div className="settings-sidebar">
         <h1>Claude Buddy</h1>
         <nav>
-          <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>Geral</button>
-          <button className={tab === 'agents' ? 'active' : ''} onClick={() => setTab('agents')}>Agentes</button>
+          <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>{t('settings.sidebar.general')}</button>
+          <button className={tab === 'agents' ? 'active' : ''} onClick={() => setTab('agents')}>{t('settings.sidebar.agents')}</button>
           <button className={tab === 'memories' ? 'active' : ''} onClick={() => setTab('memories')}>
-            Memórias <span className="count">{memories.length}</span>
+            {t('settings.sidebar.memories')} <span className="count">{memories.length}</span>
           </button>
-          <button className={tab === 'about' ? 'active' : ''} onClick={() => setTab('about')}>Sobre</button>
+          <button className={tab === 'about' ? 'active' : ''} onClick={() => setTab('about')}>{t('settings.sidebar.about')}</button>
         </nav>
       </div>
       <div className="settings-content">
         {tab === 'general' && settings && (
           <>
-            <h2>Geral</h2>
+            <h2>{t('settings.general.heading')}</h2>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Tema</div>
-                <div className="setting-help">Claro, escuro, ou segue o tema do Windows.</div>
+                <div className="setting-label">{t('settings.general.language')}</div>
+                <div className="setting-help">{t('settings.general.languageHelp')}</div>
+              </div>
+              <select
+                value={settings.locale}
+                onChange={(e) => updateSetting({ locale: e.target.value as Locale })}
+              >
+                {LANGUAGES.map((l) => (
+                  <option key={l.value} value={l.value}>{l.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="setting-row">
+              <div>
+                <div className="setting-label">{t('settings.general.theme')}</div>
+                <div className="setting-help">{t('settings.general.themeHelp')}</div>
               </div>
               <div className="theme-picker">
-                {(['light', 'auto', 'dark'] as const).map((t) => (
+                {(['light', 'auto', 'dark'] as const).map((themeKey) => (
                   <button
-                    key={t}
-                    className={settings.theme === t ? 'active' : ''}
-                    onClick={() => updateSetting({ theme: t })}
-                  >{t === 'light' ? 'Claro' : t === 'dark' ? 'Escuro' : 'Auto'}</button>
+                    key={themeKey}
+                    className={settings.theme === themeKey ? 'active' : ''}
+                    onClick={() => updateSetting({ theme: themeKey })}
+                  >{themeKey === 'light' ? t('settings.general.themeLight') : themeKey === 'dark' ? t('settings.general.themeDark') : t('settings.general.themeAuto')}</button>
                 ))}
               </div>
             </div>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Iniciar com o Windows</div>
-                <div className="setting-help">Abre o mascote sempre que ligar o PC, escondido na bandeja.</div>
+                <div className="setting-label">{t('settings.general.autostart')}</div>
+                <div className="setting-help">{t('settings.general.autostartHelp')}</div>
               </div>
               <label className="switch">
                 <input type="checkbox" checked={settings.autostart} onChange={(e) => updateSetting({ autostart: e.target.checked })} />
@@ -84,28 +106,28 @@ export function SettingsApp() {
             </div>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Tempo até dormir</div>
-                <div className="setting-help">Quantos segundos sem interação até o mascote voltar a dormir.</div>
+                <div className="setting-label">{t('settings.general.idleTimeout')}</div>
+                <div className="setting-help">{t('settings.general.idleTimeoutHelp')}</div>
               </div>
               <select value={settings.idleTimeoutMs} onChange={(e) => updateSetting({ idleTimeoutMs: Number(e.target.value) })}>
-                <option value={15000}>15 segundos</option>
-                <option value={30000}>30 segundos</option>
-                <option value={60000}>1 minuto</option>
-                <option value={120000}>2 minutos</option>
-                <option value={300000}>5 minutos</option>
+                <option value={15000}>{t('settings.general.seconds15')}</option>
+                <option value={30000}>{t('settings.general.seconds30')}</option>
+                <option value={60000}>{t('settings.general.minute1')}</option>
+                <option value={120000}>{t('settings.general.minutes2')}</option>
+                <option value={300000}>{t('settings.general.minutes5')}</option>
               </select>
             </div>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Atalho de teclado</div>
-                <div className="setting-help">Combinação que acorda o mascote de qualquer lugar.</div>
+                <div className="setting-label">{t('settings.general.hotkey')}</div>
+                <div className="setting-help">{t('settings.general.hotkeyHelp')}</div>
               </div>
               <code className="hotkey-display">{settings.hotkey}</code>
             </div>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Ler resposta em voz alta</div>
-                <div className="setting-help">O mascote fala a resposta usando vozes neurais do Edge (PT-BR, qualidade alta).</div>
+                <div className="setting-label">{t('settings.general.tts')}</div>
+                <div className="setting-help">{t('settings.general.ttsHelp')}</div>
               </div>
               <label className="switch">
                 <input type="checkbox" checked={settings.ttsEnabled} onChange={(e) => updateSetting({ ttsEnabled: e.target.checked })} />
@@ -114,15 +136,15 @@ export function SettingsApp() {
             </div>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Voz</div>
-                <div className="setting-help">Qual voz neural usar pra falar.</div>
+                <div className="setting-label">{t('settings.general.voice')}</div>
+                <div className="setting-help">{t('settings.general.voiceHelp')}</div>
               </div>
               <VoicePicker value={settings.ttsVoice} onChange={(v) => updateSetting({ ttsVoice: v })} disabled={!settings.ttsEnabled} />
             </div>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Sons</div>
-                <div className="setting-help">Bipinhos 8-bit ao acordar, mandar, terminar, etc.</div>
+                <div className="setting-label">{t('settings.general.sounds')}</div>
+                <div className="setting-help">{t('settings.general.soundsHelp')}</div>
               </div>
               <label className="switch">
                 <input type="checkbox" checked={settings.soundsEnabled} onChange={(e) => updateSetting({ soundsEnabled: e.target.checked })} />
@@ -131,8 +153,8 @@ export function SettingsApp() {
             </div>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Volume dos sons</div>
-                <div className="setting-help">{Math.round(settings.soundsVolume * 100)}% — arraste pra ajustar.</div>
+                <div className="setting-label">{t('settings.general.volume')}</div>
+                <div className="setting-help">{t('settings.general.volumeHelp', { percent: Math.round(settings.soundsVolume * 100) })}</div>
               </div>
               <input
                 type="range" min="0" max="1" step="0.01"
@@ -144,8 +166,8 @@ export function SettingsApp() {
             </div>
             <div className="setting-row">
               <div>
-                <div className="setting-label">Velocidade da fala</div>
-                <div className="setting-help">{settings.ttsRate.toFixed(2)}× — arraste pra ajustar.</div>
+                <div className="setting-label">{t('settings.general.speed')}</div>
+                <div className="setting-help">{t('settings.general.speedHelp', { rate: settings.ttsRate.toFixed(2) })}</div>
               </div>
               <input
                 type="range"
@@ -163,12 +185,10 @@ export function SettingsApp() {
 
         {tab === 'memories' && (
           <>
-            <h2>Memórias</h2>
-            <p className="settings-help-top">
-              Tudo que o mascote sabe sobre você entre conversas. Ele aprende sozinho usando a tool <code>save_memory</code>.
-            </p>
+            <h2>{t('settings.memories.heading')}</h2>
+            <p className="settings-help-top">{t('settings.memories.help')}</p>
             {memories.length === 0 ? (
-              <div className="empty">Sem memórias ainda. O mascote vai aprender com o tempo.</div>
+              <div className="empty">{t('settings.memories.empty')}</div>
             ) : (
               <ul className="memory-list">
                 {memories.map((m, i) => (
@@ -182,18 +202,18 @@ export function SettingsApp() {
             {memories.length > 0 && (
               <button
                 className="danger-btn"
-                onClick={async () => { if (confirm('Apagar todas as memórias?')) { await invoke('memories:clear'); refreshMemories(); } }}
-              >Apagar todas</button>
+                onClick={async () => { if (confirm(t('settings.memories.confirmClear'))) { await invoke('memories:clear'); refreshMemories(); } }}
+              >{t('settings.memories.clearAll')}</button>
             )}
           </>
         )}
 
         {tab === 'about' && (
           <>
-            <h2>Sobre</h2>
-            <p>Claude Buddy v0.1.0</p>
-            <p>Mascote desktop com pixel art e Claude API.</p>
-            <p className="setting-help">Construído com Electron, React, TypeScript e muita cafeína.</p>
+            <h2>{t('settings.about.heading')}</h2>
+            <p>{t('settings.about.version')}</p>
+            <p>{t('settings.about.tagline')}</p>
+            <p className="setting-help">{t('settings.about.built')}</p>
           </>
         )}
       </div>

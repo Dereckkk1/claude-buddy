@@ -1,4 +1,5 @@
 import type { Attachment } from '@/state/conversation';
+import { useT } from '@/i18n';
 
 interface Props {
   attachment: Attachment;
@@ -6,13 +7,14 @@ interface Props {
 }
 
 export function AttachmentChip({ attachment, onRemove }: Props) {
+  const t = useT();
   const label = attachment.kind === 'image'
-    ? 'imagem anexada'
+    ? t('attach.imageAttached')
     : `"${attachment.content.slice(0, 28)}${attachment.content.length > 28 ? '…' : ''}"`;
   return (
     <span className="cb-chip">
       {label}
-      <button className="cb-chip-x" onClick={onRemove} aria-label="remover">×</button>
+      <button className="cb-chip-x" onClick={onRemove} aria-label={t('attach.removeChip')}>×</button>
     </span>
   );
 }

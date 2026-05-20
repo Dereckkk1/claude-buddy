@@ -21,16 +21,11 @@
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; padding: 0; height: 100vh; background: var(--offwhite); }
 body {
-  font-family: "Lora", Georgia, "Times New Roman", Times, serif;
+  font-family: "Inter", "Styrene", "Poppins", -apple-system, system-ui, Arial, sans-serif;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3, h4, h5, h6,
-.settings-sidebar h1, .settings-sidebar button,
-.setting-label, .agent-list-name, .cb-btn-primary, .cb-btn-ghost-settings,
-.danger-btn, .theme-picker button {
-  font-family: "Poppins", Arial, Helvetica, sans-serif;
-}
+h1, h2, h3, h4, h5, h6 { font-weight: 600; letter-spacing: -0.01em; }
 
 .settings-titlebar {
   height: 38px;
@@ -73,7 +68,22 @@ h1, h2, h3, h4, h5, h6,
   border-right: 1px solid var(--border);
   padding: 24px 12px;
 }
-.settings-sidebar h1 { font-size: 16px; margin: 0 0 20px 12px; color: var(--clay); font-weight: 600; }
+.settings-sidebar h1 {
+  font-size: 18px;
+  margin: 0 0 24px 12px;
+  color: var(--ink);
+  font-weight: 500;
+  font-family: "Lora", "Tiempos Headline", Georgia, serif;
+  letter-spacing: -0.01em;
+}
+.settings-sidebar h1::before {
+  content: "✷";
+  color: var(--clay);
+  margin-right: 8px;
+  font-family: "Inter", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+}
 .settings-sidebar nav { display: flex; flex-direction: column; gap: 4px; }
 .settings-sidebar button {
   text-align: left;
@@ -172,7 +182,8 @@ select option { background: var(--bg-elevated); color: var(--ink); }
   border-radius: 50%;
   transition: 200ms;
 }
-.switch input:checked + span { background-color: var(--clay); }
+/* On = saturated blue (per skill — toggle ON is blue, not orange) */
+.switch input:checked + span { background-color: var(--blue); }
 .switch input:checked + span:before { transform: translateX(16px); }
 
 .memory-list { list-style: none; padding: 0; margin: 0 0 16px 0; }
@@ -243,19 +254,22 @@ select option { background: var(--bg-elevated); color: var(--ink); }
 }
 .agent-list-action:hover { background: var(--offwhite-alt); }
 
+/* App-mode primary = BLACK (orange is reserved for the send button) */
 .cb-btn-primary {
-  background: var(--clay);
-  color: white;
+  background: var(--ink);
+  color: var(--offwhite);
   border: none;
   padding: 7px 14px;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   font-family: inherit;
 }
-.cb-btn-primary:hover:not(:disabled) { background: var(--clay-dark); }
+.cb-btn-primary:hover:not(:disabled) { background: #2a2826; }
 .cb-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+:root[data-theme="dark"] .cb-btn-primary { background: var(--offwhite); color: var(--ink); }
+:root[data-theme="dark"] .cb-btn-primary:hover:not(:disabled) { background: #e5e3dc; }
 
 .cb-btn-ghost-settings {
   background: transparent;

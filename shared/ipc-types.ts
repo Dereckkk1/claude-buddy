@@ -9,6 +9,8 @@ export interface AgentDTO {
   sharedMemories?: boolean;
 }
 
+export type Locale = 'en' | 'pt' | 'es';
+
 export interface AppSettingsDTO {
   autostart: boolean;
   idleTimeoutMs: number;
@@ -19,6 +21,7 @@ export interface AppSettingsDTO {
   theme: 'light' | 'dark' | 'auto';
   soundsEnabled: boolean;
   soundsVolume: number;
+  locale: Locale;
 }
 
 export interface IpcRequests {

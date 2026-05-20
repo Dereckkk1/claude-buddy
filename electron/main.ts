@@ -20,9 +20,9 @@ import {
   typeText, pressKey, scroll, cursorPosition,
 } from './automation';
 import { pickAndParseFile } from './file-parser';
-import { synthesize, VOICES } from './edge-tts';
+import { synthesize, getVoices, defaultVoiceFor, languageOfVoice } from './edge-tts';
 import { registerHotkeys, unregisterHotkeys } from './hotkeys';
-import { createTray, destroyTray } from './tray';
+import { createTray, destroyTray, refreshTrayMenu } from './tray';
 import { setupAutoUpdater } from './updater';
 
 let mascotWin: BrowserWindow | null = null;
@@ -38,6 +38,7 @@ function createConfigWindow(): BrowserWindow {
     height: 320,
     resizable: false,
     title: 'Claude Buddy — Config',
+    icon: path.join(__dirname, '../assets/sprites/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -61,6 +62,7 @@ function createSettingsWindow(): BrowserWindow {
     width: 760,
     height: 540,
     title: 'Claude Buddy — Settings',
+    icon: path.join(__dirname, '../assets/sprites/icon.png'),
     resizable: true,
     frame: false,
     autoHideMenuBar: true,
@@ -201,17 +203,39 @@ function bootstrap() {
     'agents:delete': (id) => deleteAgent(id),
     'settings:get': () => getSettings(),
     'settings:update': (patch) => {
+      // If the locale is changing AND the current voice belongs to a different
+      // language, auto-switch the voice to the new locale's default. Without
+      // this, switching UI to EN leaves the TTS reading English text with a
+      // Portuguese accent (technically works, sounds odd).
+      if (patch.locale) {
+        const cur = getSettings();
+        if (languageOfVoice(cur.ttsVoice) !== patch.locale) {
+          patch = { ...patch, ttsVoice: defaultVoiceFor(patch.locale) };
+        }
+      }
       const next = updateSettings(patch);
       if ('autostart' in patch) {
         app.setLoginItemSettings({ openAtLogin: next.autostart, args: ['--hidden'] });
       }
-      // Broadcast to mascot window so its local state stays in sync
-      mascotWin?.webContents.send('settings:changed', next);
+      // Broadcast to every open renderer so all UIs (mascot + settings window)
+      // stay in sync — i18n strings re-translate as soon as the locale lands.
+      const broadcast = (channel: string, payload: unknown) => {
+        mascotWin?.webContents.send(channel, payload);
+        settingsWin?.webContents.send(channel, payload);
+      };
+      broadcast('settings:changed', next);
+      // Locale changes also relocalize built-in agents (names + prompts come
+      // from the i18n dict) and the tray context menu. Push a fresh active
+      // agent and rebuild the tray so everything follows the new language.
+      if ('locale' in patch) {
+        broadcast('agents:changed', getActiveAgent());
+        refreshTrayMenu();
+      }
       return next;
     },
     'settings:open': () => { createSettingsWindow(); },
     'tts:synthesize': ({ text, voice }) => synthesize(text, voice),
-    'tts:voices': () => VOICES,
+    'tts:voices': () => getVoices(),
     'keyboard:read-selection': async () => {
       console.log('[main] read-selection invoked, lastFg:', getLastForegroundHwnd());
       mascotWin?.blur();

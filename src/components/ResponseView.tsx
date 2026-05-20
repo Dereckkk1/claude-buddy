@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useT } from '@/i18n';
 
 interface Props {
   text: string;
@@ -8,22 +9,6 @@ interface Props {
   onContinue: () => void;
   onQuickReply?: (text: string) => void;
 }
-
-const QUICK_REPLIES = [
-  { label: 'explica melhor', send: 'explica melhor isso' },
-  { label: 'dá um exemplo', send: 'me dá um exemplo prático' },
-  { label: 'resume', send: 'resume em 1 frase' },
-];
-
-// Hardcoded labels — economiza tokens (não pede pro Claude gerar)
-const STEP_LABELS: Record<string, string> = {
-  read_selection: 'leu o que você selecionou',
-  edit_in_place: 'editou na sua janela',
-  save_memory: 'salvou na memória',
-  screenshot: 'tirou print da tela',
-  attached_image: 'leu a imagem',
-  attached_file: 'leu o arquivo',
-};
 
 type Segment = { kind: 'text'; content: string } | { kind: 'step'; tool: string };
 
@@ -46,7 +31,13 @@ function parseSegments(text: string): Segment[] {
 }
 
 export function ResponseView({ text, showActions, onOk, onContinue, onQuickReply }: Props) {
+  const t = useT();
   const segments = parseSegments(text);
+  const quickReplies = [
+    { label: t('response.explainMore'), send: t('response.quickReplyExplain') },
+    { label: t('response.giveExample'), send: t('response.quickReplyExample') },
+    { label: t('response.summarize'), send: t('response.quickReplySummarize') },
+  ];
 
   return (
     <div>
@@ -61,18 +52,20 @@ export function ResponseView({ text, showActions, onOk, onContinue, onQuickReply
               </ReactMarkdown>
             );
           }
-          const label = STEP_LABELS[seg.tool] ?? seg.tool;
+          // step labels come from the i18n dict (key: steps.<tool>). Falls back
+          // to the raw tool name if the dict doesn't have a translation yet.
+          const label = t(`steps.${seg.tool}`);
           return (
             <div key={i} className="cb-step">
               <span className="cb-step-dot">·</span>
-              <span>{label}</span>
+              <span>{label === `steps.${seg.tool}` ? seg.tool : label}</span>
             </div>
           );
         })}
       </div>
       {showActions && onQuickReply && (
         <div className="cb-quick-replies">
-          {QUICK_REPLIES.map((qr) => (
+          {quickReplies.map((qr) => (
             <button key={qr.label} className="cb-quick-reply" onClick={() => onQuickReply(qr.send)}>
               {qr.label}
             </button>
@@ -81,8 +74,8 @@ export function ResponseView({ text, showActions, onOk, onContinue, onQuickReply
       )}
       {showActions && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-          <button className="cb-btn cb-btn-secondary" onClick={onContinue}>Continuar</button>
-          <button className="cb-btn cb-btn-primary" onClick={onOk}>OK</button>
+          <button className="cb-btn cb-btn-secondary" onClick={onContinue}>{t('response.continue')}</button>
+          <button className="cb-btn cb-btn-primary" onClick={onOk}>{t('response.ok')}</button>
         </div>
       )}
     </div>

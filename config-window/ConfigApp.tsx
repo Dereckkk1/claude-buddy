@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { invoke } from '../src/services/ipc';
+import { useT } from '../src/i18n';
 
 export function ConfigApp() {
+  const t = useT();
   const [key, setKey] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     if (!key.startsWith('sk-ant-')) {
-      alert('Essa key não parece válida (deve começar com sk-ant-)');
+      alert(t('config.invalid'));
       return;
     }
     setSaving(true);
@@ -17,18 +19,20 @@ export function ConfigApp() {
 
   return (
     <div>
-      <h1>Configura a API key do Claude</h1>
+      <h1>{t('config.heading')}</h1>
       <p className="small">
-        Pega uma key em <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a> (settings → API keys).
+        {t('config.help')}{' '}
+        <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">{t('config.helpLinkText')}</a>{' '}
+        {t('config.helpAfter')}
       </p>
       <input
         type="password"
-        placeholder="sk-ant-..."
+        placeholder={t('config.placeholder')}
         value={key}
         onChange={(e) => setKey(e.target.value)}
       />
       <button onClick={handleSave} disabled={saving || !key}>
-        {saving ? 'Salvando...' : 'Salvar'}
+        {saving ? t('config.saving') : t('config.save')}
       </button>
     </div>
   );

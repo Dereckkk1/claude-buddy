@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { AgentEvent } from '@/services/agent';
+import { useT } from '@/i18n';
 
 interface Props {
   status: string;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function AgentOverlay({ status, events, onStop }: Props) {
+  const t = useT();
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,7 +23,7 @@ export function AgentOverlay({ status, events, onStop }: Props) {
           <span className="agent-spinner"></span>
           <span>{status}</span>
         </div>
-        <button className="cb-btn cb-btn-stop" onClick={onStop}>parar</button>
+        <button className="cb-btn cb-btn-stop" onClick={onStop}>{t('agent.stop')}</button>
       </div>
       <div className="agent-log" ref={logRef}>
         {events.map((e, i) => (

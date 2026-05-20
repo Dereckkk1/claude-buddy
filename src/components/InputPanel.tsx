@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import buddyIcon from '../../assets/sprites/icon.png';
+import { useT } from '@/i18n';
 
 interface Props {
   onSubmit: (text: string) => void;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disabled }: Props) {
+  const t = useT();
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -29,7 +31,7 @@ export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disab
         <input
           ref={inputRef}
           className="cb-input"
-          placeholder={agentMode ? 'qual o objetivo? (ex: abre a calculadora)' : 'pergunta qualquer coisa...'}
+          placeholder={agentMode ? t('input.placeholderAgent') : t('input.placeholder')}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
@@ -37,23 +39,25 @@ export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disab
           autoFocus
         />
         <button
-          className="cb-btn cb-btn-primary"
+          className="cb-btn-send"
           onClick={handleSubmit}
           disabled={disabled || !text.trim()}
-        >Enviar</button>
+          aria-label={t('input.send')}
+          title={t('input.send')}
+        >↑</button>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'space-between' }}>
         <button
           className="cb-btn cb-btn-ghost"
           onClick={onAttach}
           disabled={disabled}
-          title="anexar imagem, arquivo ou item do clipboard"
-        >＋ Anexar</button>
+          title={t('input.attachTitle')}
+        >＋ {t('input.attach')}</button>
         <button
           className={agentMode ? 'cb-btn cb-btn-primary' : 'cb-btn cb-btn-ghost'}
           onClick={onToggleAgent}
           disabled={disabled}
-          title="modo agente — o mascote pilota o computador"
+          title={t('input.agentModeTitle')}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
           <img
@@ -63,7 +67,7 @@ export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disab
             height={24}
             style={{ imageRendering: 'pixelated', display: 'block' }}
           />
-          Modo Agente {agentMode ? '✓' : ''}
+          {t('input.agentMode')} {agentMode ? '✓' : ''}
         </button>
       </div>
     </div>

@@ -22,6 +22,7 @@ import { invoke, on, off } from './services/ipc';
 import { useDrag } from './hooks/useDrag';
 import { useTheme } from './hooks/useTheme';
 import { pickGreeting } from './services/greetings';
+import { useT } from './i18n';
 import type { SpriteState } from './services/sprite-animator';
 import './App.css';
 
@@ -32,13 +33,14 @@ const EXPANDED_WIDE = { w: 800, h: 380 }; // when attach picker is open
 const AGENT_SIZE = { w: 460, h: 380 };
 
 export default function App() {
+  const t = useT();
   const [state, setState] = useState<SpriteState>('sleeping');
   const [continueCounter, setContinueCounter] = useState(0);
   const [greeting, setGreeting] = useState(pickGreeting);
   const [agentMode, setAgentMode] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
-  const [agentStatus, setAgentStatus] = useState('iniciando');
+  const [agentStatus, setAgentStatus] = useState(() => t('agent.starting'));
   const [modelLabel, setModelLabel] = useState<string | null>(null);
   const [showAttachPicker, setShowAttachPicker] = useState(false);
   const [settings, setSettings] = useState<AppSettingsDTO | null>(null);
@@ -60,7 +62,13 @@ export default function App() {
   useEffect(() => { refreshMemoriesCache(); }, []);
   useEffect(() => {
     invoke('settings:get').then(setSettings);
-    const handler = (...args: unknown[]) => setSettings(args[0] as AppSettingsDTO);
+    const handler = (...args: unknown[]) => {
+      const next = args[0] as AppSettingsDTO;
+      setSettings(next);
+      // When the user changes language, refresh the greeting so the visible
+      // line matches the new locale immediately (it's a snapshot at mount).
+      setGreeting(pickGreeting());
+    };
     on('settings:changed', handler);
     return () => off('settings:changed');
   }, []);
@@ -150,8 +158,8 @@ export default function App() {
   const showInput = !showResponse && conv.status !== 'thinking';
 
   const startAgent = async (goal: string) => {
-    setAgentEvents([{ type: 'status', message: 'iniciando' }]);
-    setAgentStatus('iniciando');
+    setAgentEvents([{ type: 'status', message: t('agent.starting') }]);
+    setAgentStatus(t('agent.starting'));
     setAgentRunning(true);
     setState('thinking');
     const controller = new AbortController();
@@ -163,14 +171,14 @@ export default function App() {
         onEvent: (e) => {
           setAgentEvents((prev) => [...prev, e]);
           if (e.type === 'status') setAgentStatus(e.message);
-          if (e.type === 'done') setAgentStatus('feito');
-          if (e.type === 'error') setAgentStatus('erro');
+          if (e.type === 'done') setAgentStatus(t('agent.done'));
+          if (e.type === 'error') setAgentStatus(t('agent.error'));
         },
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'erro desconhecido';
+      const msg = err instanceof Error ? err.message : t('errors.unknownAgent');
       setAgentEvents((prev) => [...prev, { type: 'error', message: msg }]);
-      setAgentStatus('erro');
+      setAgentStatus(t('agent.error'));
     } finally {
       abortRef.current = null;
       setState('idle');
@@ -180,7 +188,7 @@ export default function App() {
   const stopAgent = () => {
     abortRef.current?.abort();
     setAgentRunning(false);
-    setAgentEvents((prev) => [...prev, { type: 'status', message: 'parado' }]);
+    setAgentEvents((prev) => [...prev, { type: 'status', message: t('agent.stopped') }]);
   };
 
   const handleSubmit = async (text: string) => {
@@ -223,13 +231,8 @@ export default function App() {
       if (settings?.soundsEnabled) playDone();
     } catch (err) {
       const code = err instanceof Error ? err.message : 'UNKNOWN';
-      const msg = {
-        NETWORK: 'tô offline, confere a internet aí',
-        INVALID_API_KEY: 'API key não tá rolando — reabre a config pelo tray',
-        RATE_LIMITED: 'calma aí, muita pergunta junta',
-        API_KEY_MISSING: 'API key não configurada',
-        UNKNOWN: 'deu ruim aqui, tenta de novo?',
-      }[code] || `erro: ${code}`;
+      const KNOWN = ['NETWORK', 'INVALID_API_KEY', 'RATE_LIMITED', 'API_KEY_MISSING', 'UNKNOWN'];
+      const msg = KNOWN.includes(code) ? t(`errors.${code}`) : `error: ${code}`;
       conv.setError(msg);
       conv.setStatus('error');
       setState('idle');
@@ -281,8 +284,8 @@ export default function App() {
                       background: 'none', border: 'none', cursor: 'pointer',
                       color: 'var(--ink-soft)', fontSize: 11, padding: 0,
                     }}
-                    title={isSpeaking() ? 'parar' : 'reproduzir de novo'}
-                  >{isSpeaking() ? '◼ parar' : '▶ reproduzir'}</button>
+                    title={isSpeaking() ? t('bubble.stop') : t('bubble.play')}
+                  >{isSpeaking() ? t('bubble.stop') : t('bubble.play')}</button>
                 ) : <span />}
                 {modelLabel && (
                   <div style={{
@@ -317,14 +320,14 @@ export default function App() {
           )}
           {conv.status === 'thinking' && (
             <div className="cb-thinking">
-              pensando
+              {t('bubble.thinking')}
               <span className="cb-thinking-dots"><span></span><span></span><span></span></span>
             </div>
           )}
           {conv.status === 'error' && conv.error && (
             <div className="cb-error">
               <span>{conv.error}</span>
-              <button className="cb-btn cb-btn-secondary" onClick={() => { conv.setError(null); conv.setStatus('idle'); }}>OK</button>
+              <button className="cb-btn cb-btn-secondary" onClick={() => { conv.setError(null); conv.setStatus('idle'); }}>{t('response.ok')}</button>
             </div>
           )}
         </SpeechBubble>
