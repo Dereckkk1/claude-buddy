@@ -11,9 +11,18 @@ export interface Message {
   content: string;
 }
 
+export interface AttachedPath {
+  id: string;
+  path: string;
+  kind: 'file' | 'folder';
+  name: string;
+  size: number;
+}
+
 interface ConversationState {
   messages: Message[];
   attachments: Attachment[];
+  attachedPaths: AttachedPath[];
   status: Status;
   error: string | null;
 
@@ -22,6 +31,8 @@ interface ConversationState {
   appendAssistantChunk: (chunk: string) => void;
   addAttachment: (a: Attachment) => void;
   removeAttachment: (index: number) => void;
+  addAttachedPath: (p: AttachedPath) => void;
+  removeAttachedPath: (id: string) => void;
   setStatus: (s: Status) => void;
   setError: (e: string | null) => void;
   reset: () => void;
@@ -30,6 +41,7 @@ interface ConversationState {
 export const useConversation = create<ConversationState>((set) => ({
   messages: [],
   attachments: [],
+  attachedPaths: [],
   status: 'idle',
   error: null,
 
@@ -54,8 +66,13 @@ export const useConversation = create<ConversationState>((set) => ({
   removeAttachment: (i) =>
     set((s) => ({ attachments: s.attachments.filter((_, idx) => idx !== i) })),
 
+  addAttachedPath: (p) => set((s) => ({ attachedPaths: [...s.attachedPaths, p] })),
+
+  removeAttachedPath: (id) =>
+    set((s) => ({ attachedPaths: s.attachedPaths.filter((x) => x.id !== id) })),
+
   setStatus: (status) => set({ status }),
   setError: (error) => set({ error }),
 
-  reset: () => set({ messages: [], attachments: [], status: 'idle', error: null }),
+  reset: () => set({ messages: [], attachments: [], attachedPaths: [], status: 'idle', error: null }),
 }));
