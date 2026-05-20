@@ -4,6 +4,7 @@ import { stat as fsStat } from 'node:fs/promises';
 import { basename, resolve as resolvePath } from 'node:path';
 import { listFolder, readFile as readFileFs, pathIsWithin } from './files';
 import { runPowerShell } from './shell';
+import * as mcp from './mcp';
 import { createMascotWindow } from './window-manager';
 import { registerHandlers } from './ipc';
 import {
@@ -128,6 +129,16 @@ function bootstrap() {
   // Migrate legacy memories into the Buddy agent on first run
   initAgentsIfNeeded(listMemories());
 
+  // MCP: kick off enabled servers in background (don't block bootstrap).
+  // UI will see them flip from 'starting' to 'running' as they handshake.
+  void mcp.startAllEnabled().catch((e) => console.error('[mcp] startAllEnabled:', e));
+  // Broadcast MCP state changes to the mascot renderer so the tools cache
+  // and the settings UI stay in sync without polling.
+  mcp.onStatesChanged((states) => {
+    mascotWin?.webContents.send('mcp:states-changed', states);
+    settingsWin?.webContents.send('mcp:states-changed', states);
+  });
+
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     const allowed = ['media', 'mediaKeySystem', 'midi', 'audioCapture'];
     callback(allowed.includes(permission));
@@ -229,6 +240,15 @@ function bootstrap() {
       const s = await fsStat(p).catch(() => null);
       return { path: p, name: basename(p), size: s?.size ?? 0 };
     },
+    'mcp:list-configs':   () => mcp.listConfigs(),
+    'mcp:add-config':     (input) => mcp.addConfig(input),
+    'mcp:update-config':  ({ id, patch }) => mcp.updateConfig(id, patch),
+    'mcp:delete-config':  (id) => mcp.deleteConfig(id),
+    'mcp:import-json':    (rawJson) => mcp.importJson(rawJson),
+    'mcp:list-states':    () => mcp.getStates(),
+    'mcp:restart-server': async (id) => { await mcp.restartServer(id); },
+    'mcp:list-tools':     () => mcp.listAllTools(),
+    'mcp:call-tool':      async ({ prefixedName, input }) => mcp.callTool(prefixedName, input),
     'shell:run-command': async ({ command, cwd, timeoutMs }) => {
       try {
         const result = await runPowerShell(command, cwd, timeoutMs);
@@ -336,7 +356,19 @@ app.on('window-all-closed', () => {
   // Keep app alive (tray remains)
 });
 
-app.on('will-quit', () => {
-  unregisterHotkeys();
-  destroyTray();
+app.on('will-quit', (event) => {
+  // Give MCP servers up to 3s to shut down cleanly
+  event.preventDefault();
+  const cleanup = (async () => {
+    try {
+      await Promise.race([
+        mcp.stopAll(),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]);
+    } catch { /* swallow */ }
+    unregisterHotkeys();
+    destroyTray();
+    app.exit(0);
+  });
+  void cleanup();
 });

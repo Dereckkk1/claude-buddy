@@ -5,6 +5,7 @@ import { translate } from '@shared/i18n-strings';
 import { invoke } from './ipc';
 import { getLocale } from '@/i18n';
 import { TOOLS, executeTool, type ToolResult } from './skills';
+import { getMCPTools } from './mcp-tools-cache';
 
 const HAIKU = 'claude-haiku-4-5-20251001';
 const SONNET = 'claude-sonnet-4-6';
@@ -162,11 +163,19 @@ export async function chatWithSkills(
 
   for (let iter = 0; iter < 6; iter++) {
     try {
+      // Merge native tools + web_search (server-side) + any MCP tools that
+      // are currently advertised by running servers. The cache makes this
+      // synchronous; states-changed events keep it fresh between turns.
+      const mcpToolDefs = getMCPTools().map((t) => ({
+        name: t.prefixedName,
+        description: t.description,
+        input_schema: t.inputSchema,
+      }));
       const stream = await client.messages.stream({
         model,
         max_tokens: 1024,
         system,
-        tools: [...TOOLS, WEB_SEARCH_TOOL] as never,
+        tools: [...TOOLS, WEB_SEARCH_TOOL, ...mcpToolDefs] as never,
         messages: apiMessages as never,
       });
 

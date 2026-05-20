@@ -79,6 +79,20 @@ export interface IpcRequests {
     Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;
   'shell:run-command': (params: { command: string; cwd?: string; timeoutMs?: number }) =>
     { ok: true; result: import('../electron/shell').RunResult } | { ok: false; error: string };
+
+  // MCP (Model Context Protocol)
+  'mcp:list-configs':   () => import('./mcp-types').MCPServerConfig[];
+  'mcp:add-config':     (input: Omit<import('./mcp-types').MCPServerConfig, 'id' | 'prefix'>) =>
+                          import('./mcp-types').MCPServerConfig;
+  'mcp:update-config':  (params: { id: string; patch: Partial<Omit<import('./mcp-types').MCPServerConfig, 'id'>> }) =>
+                          import('./mcp-types').MCPServerConfig | null;
+  'mcp:delete-config':  (id: string) => void;
+  'mcp:import-json':    (rawJson: string) => { added: number; errors: string[] };
+  'mcp:list-states':    () => import('./mcp-types').MCPServerState[];
+  'mcp:restart-server': (id: string) => Promise<void>;
+  'mcp:list-tools':     () => import('./mcp-types').MCPToolDef[];
+  'mcp:call-tool':      (params: { prefixedName: string; input: Record<string, unknown> }) =>
+                          import('./mcp-types').MCPCallToolResult;
 }
 
 export interface IpcEvents {

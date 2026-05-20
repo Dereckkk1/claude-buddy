@@ -2,6 +2,7 @@
 import { invoke } from './ipc';
 import { useConversation } from '@/state/conversation';
 import { requestApproval, publishCardResult } from './run-command-bridge';
+import { getMCPToolNames } from './mcp-tools-cache';
 
 export interface ToolDef {
   name: string;
@@ -186,8 +187,16 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       publishCardResult(id, { kind: 'ok', result: r.result });
       return { content: JSON.stringify(r.result) };
     }
-    default:
+    default: {
+      // MCP tool? Route through the main process. Cache tells us if this
+      // prefixed name belongs to a running MCP server.
+      if (getMCPToolNames().has(name)) {
+        const r = await invoke('mcp:call-tool', { prefixedName: name, input });
+        if (r.ok) return { content: r.content };
+        return { content: `error: ${r.error ?? 'unknown MCP error'}` };
+      }
       return { content: `Tool desconhecida: ${name}` };
+    }
   }
 }
 
