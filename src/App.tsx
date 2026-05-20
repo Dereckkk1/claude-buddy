@@ -43,6 +43,7 @@ export default function App() {
   const [agentStatus, setAgentStatus] = useState(() => t('agent.starting'));
   const [modelLabel, setModelLabel] = useState<string | null>(null);
   const [showAttachPicker, setShowAttachPicker] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [settings, setSettings] = useState<AppSettingsDTO | null>(null);
   const [muted, setMuted] = useState(false);
   const [activeAgent, setActiveAgent] = useState<AgentDTO | null>(null);
@@ -246,11 +247,42 @@ export default function App() {
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0,
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
-      gap: 10, padding: 12,
-    }}>
+    <div
+      style={{
+        position: 'fixed', inset: 0,
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+        gap: 10, padding: 12,
+      }}
+      onDragOver={(e) => {
+        if (state === 'sleeping' || agentRunning) return;
+        e.preventDefault();
+        if (!isDraggingOver) setIsDraggingOver(true);
+      }}
+      onDragLeave={(e) => {
+        // only clear when leaving the actual container (not bubbling from child)
+        if (e.currentTarget === e.target) setIsDraggingOver(false);
+      }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setIsDraggingOver(false);
+        if (state === 'sleeping' || agentRunning) return;
+        const files = Array.from(e.dataTransfer.files);
+        if (!files.length) return;
+        const paths = files
+          .map((f) => (window as unknown as { fileBridge: { getPathForFile: (file: File) => string } }).fileBridge.getPathForFile(f))
+          .filter(Boolean);
+        if (!paths.length) return;
+        const resolved = await invoke('files:resolve-dropped', paths);
+        for (const r of resolved) {
+          conv.addAttachedPath({ id: crypto.randomUUID(), ...r });
+        }
+      }}
+    >
+      {isDraggingOver && (
+        <div className="cb-drop-overlay">
+          <div className="cb-drop-overlay-inner">{t('attach.dropHere')}</div>
+        </div>
+      )}
       {state !== 'sleeping' && agentRunning && (
         <AgentOverlay status={agentStatus} events={agentEvents} onStop={stopAgent} />
       )}

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { IpcRequests } from '../shared/ipc-types';
 
 const api = {
@@ -15,8 +15,17 @@ const api = {
 
 contextBridge.exposeInMainWorld('electronAPI', api);
 
+// Expose the path-from-File helper so drag-drop handlers can resolve dropped
+// items to absolute paths (webUtils is not directly available in a sandboxed
+// renderer).
+const fileBridge = {
+  getPathForFile: (f: File) => webUtils.getPathForFile(f),
+};
+contextBridge.exposeInMainWorld('fileBridge', fileBridge);
+
 declare global {
   interface Window {
     electronAPI: typeof api;
+    fileBridge: typeof fileBridge;
   }
 }

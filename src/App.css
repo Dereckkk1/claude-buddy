@@ -542,6 +542,28 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 .agent-log-error { color: #c0392b; }
 .agent-log-done { color: #b8654a; font-weight: 600; }
 
+/* Drag-and-drop overlay (shown while user is dragging files over the window) */
+.cb-drop-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 9999;
+  background: rgba(250, 249, 245, 0.6);
+}
+
+.cb-drop-overlay-inner {
+  padding: 18px 28px;
+  border: 2px dashed var(--clay);
+  border-radius: 20px;
+  background: var(--bg-elevated);
+  font-family: "Lora", "Tiempos Headline", Georgia, serif;
+  font-size: 18px;
+  color: var(--ink);
+}
+
 /* "Pensando" dots */
 .cb-thinking {
   display: inline-flex; gap: 4px; margin-top: 6px; align-items: center;
