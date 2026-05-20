@@ -268,14 +268,16 @@ export async function startServer(id: string): Promise<void> {
 
   if (entry.state.status === 'running' || entry.state.status === 'starting') return;
   setStatus(id, 'starting');
+  console.log(`[mcp] starting ${entry.config.name} (${entry.config.command} ${entry.config.args.join(' ')})`);
 
   try {
     const { Client } = (await import('@modelcontextprotocol/sdk/client/index.js')) as typeof import('@modelcontextprotocol/sdk/client/index.js');
     const { StdioClientTransport } = (await import('@modelcontextprotocol/sdk/client/stdio.js')) as typeof import('@modelcontextprotocol/sdk/client/stdio.js');
 
     const expandedEnv = expandEnvVars(entry.config.env);
-    // Merge a sane base PATH so commands like `npx` resolve. process.env may
-    // already have it; user-provided env overrides on collision.
+    // Merge a sane base env so commands like `npx` resolve via PATH. We have
+    // to be careful: in packaged Electron, process.env may have very few
+    // entries on macOS/Linux but PATH is critical for command resolution.
     const env: Record<string, string> = {
       ...Object.fromEntries(
         Object.entries(process.env).filter((p): p is [string, string] => typeof p[1] === 'string'),
@@ -292,27 +294,41 @@ export async function startServer(id: string): Promise<void> {
 
     const client = new Client({ name: 'claude-buddy', version: '0.4.0' }) as unknown as SDKClient;
 
+    // Capture stderr for the crash message — useful when handshake fails
+    // because of an exit before the JSON-RPC is even established.
+    let stderrBuffer = '';
+    const transportInternal = transport as unknown as { stderr?: NodeJS.ReadableStream };
+    if (transportInternal.stderr && typeof transportInternal.stderr.on === 'function') {
+      transportInternal.stderr.on('data', (chunk: Buffer | string) => {
+        stderrBuffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        if (stderrBuffer.length > 8000) stderrBuffer = stderrBuffer.slice(-8000);
+      });
+    }
+
     transport.onerror = (err: unknown) => {
       const e = runtime.get(id);
       if (!e) return;
       const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[mcp] ${entry.config.name} transport error:`, msg, stderrBuffer ? `\nstderr: ${stderrBuffer}` : '');
       e.tools = [];
-      setStatus(id, 'crashed', msg);
+      setStatus(id, 'crashed', `${msg}${stderrBuffer ? '\n— stderr —\n' + stderrBuffer : ''}`);
     };
     transport.onclose = () => {
       const e = runtime.get(id);
       if (!e) return;
-      // Only flip to crashed if we were running; intentional stop already handled.
       if (e.state.status === 'running' || e.state.status === 'starting') {
+        console.error(`[mcp] ${entry.config.name} process exited`, stderrBuffer ? `\nstderr: ${stderrBuffer}` : '');
         e.tools = [];
-        setStatus(id, 'crashed', 'server process exited unexpectedly');
+        setStatus(id, 'crashed', `process exited unexpectedly${stderrBuffer ? '\n— stderr —\n' + stderrBuffer : ''}`);
       }
     };
 
-    // 10s timeout for the handshake
-    await client.connect(transport, { timeout: 10_000 });
+    // Handshake. First-run npx can take 30s+ to download the package, so
+    // give it 60s before bailing.
+    console.log(`[mcp] ${entry.config.name} connecting…`);
+    await client.connect(transport, { timeout: 60_000 });
+    console.log(`[mcp] ${entry.config.name} connected, listing tools…`);
 
-    // Discover tools
     const listed = await client.listTools();
     const tools: MCPToolDef[] = [];
     const seenNames = new Set<string>();
@@ -331,9 +347,13 @@ export async function startServer(id: string): Promise<void> {
     entry.client = client;
     entry.transport = transport;
     entry.tools = tools;
+    console.log(`[mcp] ${entry.config.name} running — ${tools.length} tools: ${tools.map(t => t.originalName).join(', ')}`);
     setStatus(id, 'running');
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'unknown spawn error';
+    const msg = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error && e.stack ? e.stack : '';
+    console.error(`[mcp] ${entry.config.name} startServer FAILED:`, msg);
+    if (stack) console.error(stack);
     entry.client = undefined;
     entry.transport = undefined;
     entry.tools = [];
