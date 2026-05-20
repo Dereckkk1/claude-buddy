@@ -160,3 +160,14 @@ describe('readFile pdf', () => {
     }
   });
 });
+
+describe('readFile docx', () => {
+  it('parses a DOCX and returns kind=text with the extracted text', async () => {
+    const fixture = resolvePath(__dirname, 'fixtures/sample.docx');
+    const out = await readFile(fixture);
+    expect(out.kind).toBe('text');
+    if (out.kind === 'text') {
+      expect(out.text).toMatch(/Claude Buddy/i);
+    }
+  });
+});

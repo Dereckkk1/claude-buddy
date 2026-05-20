@@ -175,6 +175,22 @@ async function readPdfFile(filePath: string, maxBytes: number): Promise<FileCont
   return { path: filePath, kind: 'text', text, bytesRead: cap, truncated };
 }
 
+async function readDocxFile(filePath: string, maxBytes: number): Promise<FileContentText> {
+  const stat = await fs.stat(filePath);
+  if (stat.size === 0) throw new Error('empty file');
+  const cap = Math.min(stat.size, maxBytes);
+  const buf = Buffer.alloc(cap);
+  const fh = await fs.open(filePath, 'r');
+  try { await fh.read(buf, 0, cap, 0); } finally { await fh.close(); }
+  const mammothMod = await import('mammoth');
+  const mammoth = (mammothMod as { default?: typeof mammothMod }).default ?? mammothMod;
+  const result = await (mammoth as { extractRawText: (i: { buffer: Buffer }) => Promise<{ value: string }> })
+    .extractRawText({ buffer: buf });
+  const truncated = stat.size > cap;
+  const text = truncated ? result.value + truncatedSuffix(stat.size) : result.value;
+  return { path: filePath, kind: 'text', text, bytesRead: cap, truncated };
+}
+
 async function readTextFile(filePath: string, maxBytes: number): Promise<FileContentText> {
   const stat = await fs.stat(filePath);
   const cap = Math.min(stat.size, maxBytes);
@@ -202,6 +218,7 @@ export async function readFile(
   }
   if (kind === 'text') return readTextFile(filePath, opts.maxBytes ?? LIMITS.maxBytesText);
   if (kind === 'pdf')  return readPdfFile(filePath,  opts.maxBytes ?? LIMITS.maxBytesPdf);
-  // docx/image: stubs filled by Tasks 7/8
+  if (kind === 'docx') return readDocxFile(filePath, opts.maxBytes ?? LIMITS.maxBytesDocx);
+  // image: stub filled by Task 8
   throw new Error('not implemented');
 }
