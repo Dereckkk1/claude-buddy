@@ -18,7 +18,13 @@ function bonusFromDay(day: number, hour: number, pools: { monday: string[]; frid
   return [];
 }
 
-export function pickGreeting(now: Date = new Date()): string {
+/**
+ * Pick a contextual greeting. If `userName` is non-empty, any `{userName}`
+ * placeholder in the picked string is interpolated — strings without the
+ * placeholder are returned as-is so it doesn't matter that not every line
+ * mentions the name.
+ */
+export function pickGreeting(now: Date = new Date(), userName: string = ''): string {
   const greetings = dict(getLocale()).greeting;
   const hour = now.getHours();
   const day = now.getDay();
@@ -27,5 +33,9 @@ export function pickGreeting(now: Date = new Date()): string {
     ...bonusFromDay(day, hour, greetings),
     ...greetings.generic,
   ];
-  return pool[Math.floor(Math.random() * pool.length)];
+  const raw = pool[Math.floor(Math.random() * pool.length)];
+  // If the user hasn't set a name, strip the placeholder gracefully so we
+  // don't show "Good morning, !" in the bubble.
+  if (!userName.trim()) return raw.replace(/,?\s*\{userName\}/g, '');
+  return raw.replace(/\{userName\}/g, userName.trim());
 }

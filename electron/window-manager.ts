@@ -6,7 +6,10 @@ export const MASCOT_EXPANDED = { w: 560, h: 380 };
 const MARGIN = 12;
 
 export function createMascotWindow(savedPosition?: { x: number; y: number }): BrowserWindow {
-  const display = screen.getPrimaryDisplay();
+  // Pick whichever display the cursor is on so multi-monitor users don't end
+  // up with the mascot landing on the wrong screen on first launch.
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
   const { width: screenW, height: screenH } = display.workArea;
   const defaultX = display.workArea.x + screenW - MASCOT_COLLAPSED.w - MARGIN;
   const defaultY = display.workArea.y + screenH - MASCOT_COLLAPSED.h - MARGIN;

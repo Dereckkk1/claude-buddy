@@ -1,7 +1,13 @@
 import { exec } from 'node:child_process';
 import { clipboard } from 'electron';
 
+export interface ActiveAppInfo {
+  processName: string;
+  windowTitle: string;
+}
+
 let lastForegroundHwnd: string = '0';
+let lastActiveApp: ActiveAppInfo | null = null;
 let ownHwnds: Set<string> = new Set();
 
 export function registerOwnHwnd(hwnd: string) {
@@ -10,6 +16,12 @@ export function registerOwnHwnd(hwnd: string) {
 
 export function getLastForegroundHwnd(): string {
   return lastForegroundHwnd;
+}
+
+// Last captured foreground app metadata — null until the first non-self
+// foreground window is seen. Cheap to expose to the renderer as a snapshot.
+export function getActiveApp(): ActiveAppInfo | null {
+  return lastActiveApp;
 }
 
 function runPowerShell(script: string): Promise<{ stdout: string; stderr: string }> {
@@ -53,20 +65,30 @@ if (-not ([System.Management.Automation.PSTypeName]'CBNative.Win').Type) {
 
 export async function captureActiveWindow(): Promise<void> {
   try {
+    // Single PS roundtrip — also fetch the owning process name via
+    // GetWindowThreadProcessId + Get-Process. We separate fields with `|||`
+    // so titles containing '=' won't break parsing.
     const script = `
       ${NATIVE}
       $h = [CBNative.Win]::GetForegroundWindow()
       $sb = New-Object System.Text.StringBuilder 256
       [void][CBNative.Win]::GetWindowText($h, $sb, 256)
-      Write-Output ("HWND=" + $h.ToInt64() + " TITLE=" + $sb.ToString())
+      $pid_out = [uint32]0
+      [void][CBNative.Win]::GetWindowThreadProcessId($h, [ref]$pid_out)
+      $procName = ''
+      try { $procName = (Get-Process -Id $pid_out -ErrorAction Stop).ProcessName } catch {}
+      Write-Output ("HWND=" + $h.ToInt64() + "|||PROC=" + $procName + "|||TITLE=" + $sb.ToString())
     `;
     const { stdout } = await runPowerShell(script);
-    const match = stdout.match(/HWND=(\d+)/);
+    const match = stdout.match(/HWND=(\d+)\|\|\|PROC=([^|]*)\|\|\|TITLE=(.*)$/s);
     if (match) {
       const hwnd = match[1];
+      const processName = (match[2] ?? '').trim();
+      const windowTitle = (match[3] ?? '').trim();
       // Don't save our own windows as the target — that would just paste into the mascot.
       if (!ownHwnds.has(hwnd) && hwnd !== '0') {
         lastForegroundHwnd = hwnd;
+        lastActiveApp = { processName, windowTitle };
         console.log('[keyboard] captured non-self:', stdout);
       } else {
         console.log('[keyboard] skipped (own window):', stdout);

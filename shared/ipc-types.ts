@@ -22,6 +22,13 @@ export interface AppSettingsDTO {
   soundsEnabled: boolean;
   soundsVolume: number;
   locale: Locale;
+  userName: string;
+  awarenessEnabled: boolean;
+}
+
+export interface ActiveAppInfo {
+  processName: string;
+  windowTitle: string;
 }
 
 export interface IpcRequests {
@@ -56,6 +63,7 @@ export interface IpcRequests {
   'window:set-size': (size: { w: number; h: number }) => void;
   'keyboard:paste-to-active': (text: string) => void;
   'keyboard:read-selection': () => string | null;
+  'keyboard:get-active-app': () => ActiveAppInfo | null;
   'agent:screen-size': () => { realWidth: number; realHeight: number; scaledWidth: number; scaledHeight: number };
   'agent:screenshot': () => { scaledWidth: number; scaledHeight: number; realWidth: number; realHeight: number; base64: string };
   'agent:move-mouse': (params: { x: number; y: number }) => void;
@@ -97,6 +105,7 @@ export interface IpcRequests {
 
 export interface IpcEvents {
   'hotkey:activate': void;
+  'hotkey:ask-with-selection': void;
 }
 
 export type IpcChannel = keyof IpcRequests;

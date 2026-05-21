@@ -21,6 +21,11 @@ export interface AppSettings {
   soundsEnabled: boolean;
   soundsVolume: number;
   locale: Locale;
+  // Personalization — empty means "don't inject" (Buddy stays generic).
+  userName: string;
+  // When true, the active foreground app (process name + window title) is
+  // injected into the system prompt so Buddy can reason about context.
+  awarenessEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -34,6 +39,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundsEnabled: true,
   soundsVolume: 0.1,
   locale: 'en',
+  userName: '',
+  awarenessEnabled: true,
 };
 
 const encryptionKey = machineIdSync(true).slice(0, 32);

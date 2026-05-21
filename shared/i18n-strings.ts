@@ -12,14 +12,14 @@ export type StringDict = typeof EN;
 export const EN = {
   // Mascot greetings, picked by time of day / weekday
   greeting: {
-    morning: ['Good morning! Let’s go?', 'Ready to start?', 'Morning! I’m up.', 'Hey, fresh start.'],
-    afternoon: ['Hey, how can I help?', 'Coffee yet?', 'How’s it going?', 'I’m here, talk to me.'],
-    evening: ['Evening!', 'Day winding down.', 'Wrapping up soon?', 'Available — fire away.'],
+    morning: ['Good morning, {userName}!', 'Good morning! Let’s go?', 'Ready to start?', 'Morning! I’m up.', 'Hey, fresh start.'],
+    afternoon: ['Hey {userName}, how can I help?', 'Hey, how can I help?', 'Coffee yet?', 'How’s it going?', 'I’m here, talk to me.'],
+    evening: ['Evening, {userName}!', 'Evening!', 'Day winding down.', 'Wrapping up soon?', 'Available — fire away.'],
     latenight: ['Can’t sleep either? Shoot.', 'Late-night work?', 'I’m here, go ahead.', 'Owl mode — what’s up?'],
     monday: ['Monday — let’s go.', 'Good start to the week!', 'Monday, here we are.'],
     friday: ['Friday! What’s up?', 'Last one of the day.', 'Friyay — bring it.'],
     weekend: ['Weekend grind? Respect.', 'Saturday/Sunday — how can I help?', 'Weekend, I’m here.'],
-    generic: ['How can I help?', 'Go ahead.', 'I’m listening.', 'What’s the idea?', 'What can I do?'],
+    generic: ['How can I help, {userName}?', 'How can I help?', 'Go ahead.', 'I’m listening.', 'What’s the idea?', 'What can I do?'],
   },
 
   // Input panel
@@ -31,6 +31,36 @@ export const EN = {
     attachTitle: 'attach an image, file, or clipboard item',
     agentMode: 'Agent Mode',
     agentModeTitle: 'agent mode — the mascot drives your computer',
+    voice: 'Voice',
+    voiceListening: 'listening…',
+  },
+
+  // Slash commands (typed in the input, intercepted by the dispatcher)
+  slash: {
+    clear: 'clear the conversation',
+    sleep: 'send Buddy to sleep',
+    agent: 'switch agent (fuzzy match by name)',
+    model: 'force model for next turn: haiku | sonnet',
+    memory: 'save a fact to memory',
+    help: 'list available commands',
+    export: 'copy the thread as markdown',
+    helpHeader: '**Available commands**',
+    helpList: '- `/clear` — clear the conversation\n- `/sleep` — send Buddy to sleep\n- `/agent <name>` — switch agent (fuzzy match)\n- `/model haiku|sonnet` — force model for the next turn\n- `/memory <fact>` — save a fact to memory\n- `/export` — copy the thread as markdown\n- `/help` — this list',
+    unknownAgent: 'No agent matched "{query}".',
+    switchedTo: 'Switched to {name}.',
+    modelInvalid: '/model expects "haiku" or "sonnet" — got "{value}".',
+    modelSet: 'Next turn will use {model}.',
+    memorySaved: 'Saved to memory.',
+    memoryEmpty: '/memory needs a fact, e.g. `/memory I use Cursor`.',
+    exportCopied: 'Thread copied to clipboard as markdown.',
+    exportEmpty: 'Nothing to export yet — start a conversation first.',
+  },
+
+  // Export (markdown header)
+  exportMd: {
+    title: 'Claude Buddy',
+    you: 'Q',
+    buddy: 'A',
   },
 
   // Attach picker
@@ -100,11 +130,14 @@ export const EN = {
   // Status / inline UI
   bubble: {
     thinking: 'thinking',
+    thinkingDeep: 'thinking deeper…',
     play: '▶ play',
     stop: '◼ stop',
     close: 'close',
     manageAgents: '＋ Manage agents…',
     customTag: 'custom',
+    export: 'export as markdown',
+    exportDone: 'copied ✓',
   },
 
   // Agent overlay
@@ -177,6 +210,11 @@ export const EN = {
       idleTimeoutHelp: 'Seconds without interaction before the mascot goes back to sleep.',
       hotkey: 'Keyboard shortcut',
       hotkeyHelp: 'Combo that wakes the mascot from anywhere.',
+      userName: 'Your name (optional)',
+      userNameHelp: 'Buddy uses it in greetings and replies. Leave blank to stay anonymous.',
+      userNamePlaceholder: 'e.g. Dereck',
+      awareness: 'Foreground app awareness',
+      awarenessHelp: 'Sends the active app name + window title to Claude so it understands context. No content is read.',
       tts: 'Read responses aloud',
       ttsHelp: 'The mascot speaks the response using neural Edge voices.',
       voice: 'Voice',
@@ -328,14 +366,14 @@ export const EN = {
 
 export const PT: StringDict = {
   greeting: {
-    morning: ['Bom dia! Vamos lá?', 'Bora começar o dia?', 'Feliz novo dia!', 'Bom dia! Tô acordado'],
-    afternoon: ['E aí, no que ajudo?', 'Café já ta pronto?', 'Como tá indo?', 'Tô aqui, fala'],
-    evening: ['Boa noite!', 'Fim do dia chegando.', 'Quase acabando o expediente...', 'Tô disponível, manda!'],
+    morning: ['Bom dia, {userName}!', 'Bom dia! Vamos lá?', 'Bora começar o dia?', 'Feliz novo dia!', 'Bom dia! Tô acordado'],
+    afternoon: ['E aí {userName}, no que ajudo?', 'E aí, no que ajudo?', 'Café já ta pronto?', 'Como tá indo?', 'Tô aqui, fala'],
+    evening: ['Boa noite, {userName}!', 'Boa noite!', 'Fim do dia chegando.', 'Quase acabando o expediente...', 'Tô disponível, manda!'],
     latenight: ['Sem sono também? Manda', 'Madrugada produtiva?', 'Tô aqui, manda ver', 'Noite virou, no que ajudo?'],
     monday: ['Segundou, bora?', 'Bom começo de semana!', 'Segunda chegou, partiu'],
     friday: ['Sextou! O que rola?', 'Última do dia, manda', 'Sextouuu, manda bala?'],
     weekend: ['Folga e tu tá trampando? F', 'Sábadão/domingão, no que ajudo?', 'Fim de semana, tô aqui'],
-    generic: ['Como posso ajudar?', 'Pode mandar', 'Tô aqui, fala comigo', 'Qual a idéia?', 'No que ajudo agora?'],
+    generic: ['Como posso ajudar, {userName}?', 'Como posso ajudar?', 'Pode mandar', 'Tô aqui, fala comigo', 'Qual a idéia?', 'No que ajudo agora?'],
   },
 
   input: {
@@ -346,6 +384,34 @@ export const PT: StringDict = {
     attachTitle: 'anexar imagem, arquivo ou item do clipboard',
     agentMode: 'Modo Agente',
     agentModeTitle: 'modo agente — o mascote pilota o computador',
+    voice: 'Voz',
+    voiceListening: 'ouvindo…',
+  },
+
+  slash: {
+    clear: 'limpa a conversa',
+    sleep: 'manda o Buddy dormir',
+    agent: 'troca de agente (fuzzy match no nome)',
+    model: 'força modelo no próximo turno: haiku | sonnet',
+    memory: 'salva um fato na memória',
+    help: 'mostra a lista de comandos',
+    export: 'copia a thread como markdown',
+    helpHeader: '**Comandos disponíveis**',
+    helpList: '- `/clear` — limpa a conversa\n- `/sleep` — manda o Buddy dormir\n- `/agent <nome>` — troca de agente (fuzzy match)\n- `/model haiku|sonnet` — força modelo no próximo turno\n- `/memory <fato>` — salva um fato na memória\n- `/export` — copia a thread como markdown\n- `/help` — essa lista',
+    unknownAgent: 'Nenhum agente bateu com "{query}".',
+    switchedTo: 'Trocado pra {name}.',
+    modelInvalid: '/model espera "haiku" ou "sonnet" — veio "{value}".',
+    modelSet: 'Próximo turno vai usar {model}.',
+    memorySaved: 'Salvei na memória.',
+    memoryEmpty: '/memory precisa de um fato, ex: `/memory uso Cursor`.',
+    exportCopied: 'Thread copiada pro clipboard como markdown.',
+    exportEmpty: 'Nada pra exportar ainda — começa uma conversa primeiro.',
+  },
+
+  exportMd: {
+    title: 'Claude Buddy',
+    you: 'P',
+    buddy: 'R',
   },
 
   attach: {
@@ -410,11 +476,14 @@ export const PT: StringDict = {
 
   bubble: {
     thinking: 'pensando',
+    thinkingDeep: 'pensando mais fundo…',
     play: '▶ reproduzir',
     stop: '◼ parar',
     close: 'fechar',
     manageAgents: '＋ Gerenciar agentes…',
     customTag: 'custom',
+    export: 'exportar como markdown',
+    exportDone: 'copiado ✓',
   },
 
   agent: {
@@ -481,6 +550,11 @@ export const PT: StringDict = {
       idleTimeoutHelp: 'Quantos segundos sem interação até o mascote voltar a dormir.',
       hotkey: 'Atalho de teclado',
       hotkeyHelp: 'Combinação que acorda o mascote de qualquer lugar.',
+      userName: 'Seu nome (opcional)',
+      userNameHelp: 'O Buddy usa nos cumprimentos e respostas. Deixa vazio se preferir ficar anônimo.',
+      userNamePlaceholder: 'ex: Dereck',
+      awareness: 'Awareness do app em foco',
+      awarenessHelp: 'Envia o nome do app ativo + título da janela pro Claude entender o contexto. Não lê conteúdo.',
       tts: 'Ler resposta em voz alta',
       ttsHelp: 'O mascote fala a resposta usando vozes neurais do Edge (qualidade alta).',
       voice: 'Voz',
@@ -629,14 +703,14 @@ export const PT: StringDict = {
 
 export const ES: StringDict = {
   greeting: {
-    morning: ['¡Buenos días! ¿Vamos?', '¿Listos para empezar?', '¡Buen día! Despierto.', 'Hola, fresco como una lechuga.'],
-    afternoon: ['¿En qué te ayudo?', '¿Ya hay café?', '¿Cómo vas?', 'Aquí estoy, dime.'],
-    evening: ['¡Buenas tardes!', 'El día se acaba.', 'A punto de cerrar el día...', 'Disponible — dispara.'],
+    morning: ['¡Buenos días, {userName}!', '¡Buenos días! ¿Vamos?', '¿Listos para empezar?', '¡Buen día! Despierto.', 'Hola, fresco como una lechuga.'],
+    afternoon: ['¿En qué te ayudo, {userName}?', '¿En qué te ayudo?', '¿Ya hay café?', '¿Cómo vas?', 'Aquí estoy, dime.'],
+    evening: ['¡Buenas tardes, {userName}!', '¡Buenas tardes!', 'El día se acaba.', 'A punto de cerrar el día...', 'Disponible — dispara.'],
     latenight: ['¿Sin sueño también? Dispara', '¿Madrugada productiva?', 'Aquí estoy, dale', '¿Modo búho? ¿En qué ayudo?'],
     monday: ['Lunes — vamos.', '¡Buen comienzo de semana!', 'Lunes, aquí estamos.'],
     friday: ['¡Viernes! ¿Qué hay?', 'La última del día, dale', '¡Viernes! Manda'],
     weekend: ['¿Trabajando en finde? Respect.', 'Sábado/domingo — ¿en qué ayudo?', 'Finde, aquí estoy'],
-    generic: ['¿En qué te ayudo?', 'Dale, manda', 'Aquí estoy, habla', '¿Cuál es la idea?', '¿Qué hacemos?'],
+    generic: ['¿En qué te ayudo, {userName}?', '¿En qué te ayudo?', 'Dale, manda', 'Aquí estoy, habla', '¿Cuál es la idea?', '¿Qué hacemos?'],
   },
 
   input: {
@@ -647,6 +721,34 @@ export const ES: StringDict = {
     attachTitle: 'adjuntar imagen, archivo o ítem del portapapeles',
     agentMode: 'Modo Agente',
     agentModeTitle: 'modo agente — la mascota maneja tu computadora',
+    voice: 'Voz',
+    voiceListening: 'escuchando…',
+  },
+
+  slash: {
+    clear: 'limpia la conversación',
+    sleep: 'manda al Buddy a dormir',
+    agent: 'cambia de agente (fuzzy match por nombre)',
+    model: 'fuerza modelo para el próximo turno: haiku | sonnet',
+    memory: 'guarda un dato en la memoria',
+    help: 'muestra la lista de comandos',
+    export: 'copia el hilo como markdown',
+    helpHeader: '**Comandos disponibles**',
+    helpList: '- `/clear` — limpia la conversación\n- `/sleep` — manda al Buddy a dormir\n- `/agent <nombre>` — cambia de agente (fuzzy match)\n- `/model haiku|sonnet` — fuerza modelo para el próximo turno\n- `/memory <dato>` — guarda un dato en la memoria\n- `/export` — copia el hilo como markdown\n- `/help` — esta lista',
+    unknownAgent: 'Ningún agente coincidió con "{query}".',
+    switchedTo: 'Cambiado a {name}.',
+    modelInvalid: '/model espera "haiku" o "sonnet" — vino "{value}".',
+    modelSet: 'El próximo turno usará {model}.',
+    memorySaved: 'Guardado en la memoria.',
+    memoryEmpty: '/memory necesita un dato, ej: `/memory uso Cursor`.',
+    exportCopied: 'Hilo copiado al portapapeles como markdown.',
+    exportEmpty: 'Aún no hay nada que exportar — empieza una conversación primero.',
+  },
+
+  exportMd: {
+    title: 'Claude Buddy',
+    you: 'P',
+    buddy: 'R',
   },
 
   attach: {
@@ -711,11 +813,14 @@ export const ES: StringDict = {
 
   bubble: {
     thinking: 'pensando',
+    thinkingDeep: 'pensando más profundo…',
     play: '▶ reproducir',
     stop: '◼ parar',
     close: 'cerrar',
     manageAgents: '＋ Gestionar agentes…',
     customTag: 'custom',
+    export: 'exportar como markdown',
+    exportDone: 'copiado ✓',
   },
 
   agent: {
@@ -782,6 +887,11 @@ export const ES: StringDict = {
       idleTimeoutHelp: 'Cuántos segundos sin interacción antes de que la mascota vuelva a dormir.',
       hotkey: 'Atajo de teclado',
       hotkeyHelp: 'Combinación que despierta a la mascota desde cualquier lugar.',
+      userName: 'Tu nombre (opcional)',
+      userNameHelp: 'El Buddy lo usa en saludos y respuestas. Déjalo vacío para mantenerte anónimo.',
+      userNamePlaceholder: 'ej: Dereck',
+      awareness: 'Awareness de la app activa',
+      awarenessHelp: 'Envía el nombre de la app activa + título de la ventana a Claude para entender el contexto. No lee contenido.',
       tts: 'Leer respuesta en voz alta',
       ttsHelp: 'La mascota habla la respuesta usando voces neuronales de Edge.',
       voice: 'Voz',
