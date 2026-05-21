@@ -12,6 +12,7 @@ import * as mcp from './mcp';
 import { createMascotWindow } from './window-manager';
 import { registerHandlers } from './ipc';
 import {
+  initStore,
   getApiKey, setApiKey, getPosition, setPosition,
   listMemories, addMemory, deleteMemory, clearMemories,
   getSettings, updateSettings,
@@ -21,6 +22,7 @@ import {
   type Locale,
 } from './store';
 import {
+  initAgentsStore,
   initAgentsIfNeeded, listAgents, getActiveAgent, setActiveAgent,
   createAgent, updateAgent, deleteAgent,
   addMemoryToAgent, deleteMemoryFromAgent, clearMemoriesForAgent,
@@ -185,6 +187,15 @@ function maybeShowDailyBootNotification(): void {
 }
 
 function bootstrap() {
+  // Warm up the three `electron-store` instances. They have to be created
+  // AFTER `app.whenReady()` because v10 reads `app.getPath('userData')` in
+  // its constructor — initialising at module top-level threw "Please specify
+  // the `projectName` option." We call init explicitly here so the order
+  // is obvious and grepable.
+  initStore();
+  initAgentsStore();
+  mcp.initMcpStore();
+
   // First-run locale detection: seed settings.locale from the OS so PT/ES
   // users don't get an English-only experience on day one. We persist a
   // minimal settings object so subsequent boots take the normal path.

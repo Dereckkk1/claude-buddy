@@ -52,59 +52,71 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const encryptionKey = machineIdSync(true).slice(0, 32);
 
-export const store = new Store<Schema>({
-  name: 'claude-buddy',
-  encryptionKey,
-  defaults: {},
-});
+// Lazy-init. `electron-store` v10 reads `app.getPath('userData')` inside its
+// constructor, so calling `new Store(...)` at module top-level throws
+// "Please specify the `projectName` option." when imported before
+// `app.whenReady()`. `initStore()` is called from bootstrap() after ready;
+// every helper goes through `s()` so the order can't get wrong.
+let _store: Store<Schema> | null = null;
+function s(): Store<Schema> {
+  if (!_store) {
+    _store = new Store<Schema>({
+      name: 'claude-buddy',
+      encryptionKey,
+      defaults: {},
+    });
+  }
+  return _store;
+}
+export function initStore(): void { s(); }
 
 export function getApiKey(): string | null {
-  return store.get('apiKey') ?? null;
+  return s().get('apiKey') ?? null;
 }
 
 export function setApiKey(key: string): void {
-  store.set('apiKey', key);
+  s().set('apiKey', key);
 }
 
 export function getPosition(): { x: number; y: number } | null {
-  return store.get('position') ?? null;
+  return s().get('position') ?? null;
 }
 
 export function setPosition(pos: { x: number; y: number }): void {
-  store.set('position', pos);
+  s().set('position', pos);
 }
 
 export function listMemories(): string[] {
-  return store.get('memories') ?? [];
+  return s().get('memories') ?? [];
 }
 
 export function addMemory(fact: string): void {
-  const list = store.get('memories') ?? [];
+  const list = s().get('memories') ?? [];
   if (!list.includes(fact)) {
     list.push(fact);
     if (list.length > 50) list.shift();
-    store.set('memories', list);
+    s().set('memories', list);
   }
 }
 
 export function deleteMemory(index: number): void {
-  const list = store.get('memories') ?? [];
+  const list = s().get('memories') ?? [];
   list.splice(index, 1);
-  store.set('memories', list);
+  s().set('memories', list);
 }
 
 export function clearMemories(): void {
-  store.set('memories', []);
+  s().set('memories', []);
 }
 
 export function getSettings(): AppSettings {
-  return { ...DEFAULT_SETTINGS, ...(store.get('settings') ?? {}) };
+  return { ...DEFAULT_SETTINGS, ...(s().get('settings') ?? {}) };
 }
 
 export function updateSettings(patch: Partial<AppSettings>): AppSettings {
   const cur = getSettings();
   const next = { ...cur, ...patch };
-  store.set('settings', next);
+  s().set('settings', next);
   return next;
 }
 
@@ -117,7 +129,7 @@ export function updateSettings(patch: Partial<AppSettings>): AppSettings {
 // "npm install". A bare pattern "git" matches only "git" exactly.
 
 export function listRunCommandAllowlist(): string[] {
-  return store.get('runCommandAllowlist') ?? [];
+  return s().get('runCommandAllowlist') ?? [];
 }
 
 export function addRunCommandPattern(pattern: string): string[] {
@@ -127,7 +139,7 @@ export function addRunCommandPattern(pattern: string): string[] {
   if (!list.includes(trimmed)) {
     list.push(trimmed);
     if (list.length > 200) list.shift();
-    store.set('runCommandAllowlist', list);
+    s().set('runCommandAllowlist', list);
   }
   return list;
 }
@@ -166,31 +178,31 @@ export function matchesRunCommandAllowlist(command: string): boolean {
 // True only the very first time the app boots (before any settings have been
 // persisted). Used to seed defaults from the OS (e.g. detected locale).
 export function isFirstBoot(): boolean {
-  return !store.has('settings');
+  return !s().has('settings');
 }
 
 export function hasSeenIntro(): boolean {
-  return store.get('hasSeenIntro') ?? false;
+  return s().get('hasSeenIntro') ?? false;
 }
 
 export function markIntroSeen(): void {
-  store.set('hasSeenIntro', true);
+  s().set('hasSeenIntro', true);
 }
 
 export function getWakeCount(): number {
-  return store.get('wakeCount') ?? 0;
+  return s().get('wakeCount') ?? 0;
 }
 
 export function bumpWakeCount(): number {
-  const next = (store.get('wakeCount') ?? 0) + 1;
-  store.set('wakeCount', next);
+  const next = (s().get('wakeCount') ?? 0) + 1;
+  s().set('wakeCount', next);
   return next;
 }
 
 export function getLastBootNotificationDate(): string | null {
-  return store.get('lastBootNotificationDate') ?? null;
+  return s().get('lastBootNotificationDate') ?? null;
 }
 
 export function setLastBootNotificationDate(iso: string): void {
-  store.set('lastBootNotificationDate', iso);
+  s().set('lastBootNotificationDate', iso);
 }

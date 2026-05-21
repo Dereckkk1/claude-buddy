@@ -42,11 +42,19 @@ interface AgentsSchema {
 }
 
 const encryptionKey = machineIdSync(true).slice(0, 32);
-const agentsStore = new Store<AgentsSchema>({
-  name: 'claude-buddy-agents',
-  encryptionKey,
-  defaults: {},
-});
+// Lazy-init — see electron/store.ts for why. Same caveat applies here.
+let _agentsStore: Store<AgentsSchema> | null = null;
+function agentsStore(): Store<AgentsSchema> {
+  if (!_agentsStore) {
+    _agentsStore = new Store<AgentsSchema>({
+      name: 'claude-buddy-agents',
+      encryptionKey,
+      defaults: {},
+    });
+  }
+  return _agentsStore;
+}
+export function initAgentsStore(): void { agentsStore(); }
 
 // Built-in definitions: ID + emoji + i18n key + model. Name/prompt come from
 // the dict at read-time.
@@ -109,10 +117,10 @@ function seedBuiltIns(legacyMemories: string[] = []): StoredAgent[] {
 }
 
 export function initAgentsIfNeeded(legacyMemories: string[] = []): void {
-  const existing = agentsStore.get('agents');
+  const existing = agentsStore().get('agents');
   if (!existing || existing.length === 0) {
-    agentsStore.set('agents', seedBuiltIns(legacyMemories));
-    agentsStore.set('activeAgentId', 'buddy');
+    agentsStore().set('agents', seedBuiltIns(legacyMemories));
+    agentsStore().set('activeAgentId', 'buddy');
     return;
   }
 
@@ -142,17 +150,17 @@ export function initAgentsIfNeeded(legacyMemories: string[] = []): void {
       }
     }
   }
-  if (dirty) agentsStore.set('agents', Array.from(byId.values()));
+  if (dirty) agentsStore().set('agents', Array.from(byId.values()));
 }
 
 export function listAgents(): Agent[] {
   const locale = currentLocale();
-  const stored = agentsStore.get('agents') ?? seedBuiltIns();
+  const stored = agentsStore().get('agents') ?? seedBuiltIns();
   return stored.map((s) => hydrate(s, locale));
 }
 
 export function getActiveAgent(): Agent {
-  const id = agentsStore.get('activeAgentId') ?? 'buddy';
+  const id = agentsStore().get('activeAgentId') ?? 'buddy';
   const agents = listAgents();
   const found = agents.find((a) => a.id === id) ?? agents[0];
 
@@ -168,7 +176,7 @@ export function getActiveAgent(): Agent {
 }
 
 export function setActiveAgent(id: string): void {
-  agentsStore.set('activeAgentId', id);
+  agentsStore().set('activeAgentId', id);
 }
 
 export function createAgent(input: Omit<Agent, 'id' | 'isBuiltIn' | 'memories'>): Agent {
@@ -182,14 +190,14 @@ export function createAgent(input: Omit<Agent, 'id' | 'isBuiltIn' | 'memories'>)
     isBuiltIn: false,
     sharedMemories: input.sharedMemories,
   };
-  const agents = agentsStore.get('agents') ?? seedBuiltIns();
+  const agents = agentsStore().get('agents') ?? seedBuiltIns();
   agents.push(stored);
-  agentsStore.set('agents', agents);
+  agentsStore().set('agents', agents);
   return hydrate(stored, currentLocale());
 }
 
 export function updateAgent(id: string, patch: Partial<Omit<Agent, 'id' | 'isBuiltIn'>>): Agent | null {
-  const agents = agentsStore.get('agents') ?? seedBuiltIns();
+  const agents = agentsStore().get('agents') ?? seedBuiltIns();
   const idx = agents.findIndex((a) => a.id === id);
   if (idx === -1) return null;
   const cur = agents[idx];
@@ -206,44 +214,44 @@ export function updateAgent(id: string, patch: Partial<Omit<Agent, 'id' | 'isBui
   } else {
     agents[idx] = { ...cur, ...patch };
   }
-  agentsStore.set('agents', agents);
+  agentsStore().set('agents', agents);
   return hydrate(agents[idx], currentLocale());
 }
 
 export function deleteAgent(id: string): void {
-  const agents = (agentsStore.get('agents') ?? seedBuiltIns()).filter((a) => a.id !== id || a.isBuiltIn);
-  agentsStore.set('agents', agents);
+  const agents = (agentsStore().get('agents') ?? seedBuiltIns()).filter((a) => a.id !== id || a.isBuiltIn);
+  agentsStore().set('agents', agents);
   // If the deleted agent was active, switch to Buddy
-  if (agentsStore.get('activeAgentId') === id) {
-    agentsStore.set('activeAgentId', 'buddy');
+  if (agentsStore().get('activeAgentId') === id) {
+    agentsStore().set('activeAgentId', 'buddy');
   }
 }
 
 export function addMemoryToAgent(agentId: string, fact: string): void {
-  const agents = agentsStore.get('agents') ?? seedBuiltIns();
+  const agents = agentsStore().get('agents') ?? seedBuiltIns();
   const idx = agents.findIndex((a) => a.id === agentId);
   if (idx === -1) return;
   if (!agents[idx].memories.includes(fact)) {
     agents[idx].memories.push(fact);
     if (agents[idx].memories.length > 50) agents[idx].memories = agents[idx].memories.slice(-50);
-    agentsStore.set('agents', agents);
+    agentsStore().set('agents', agents);
   }
 }
 
 export function deleteMemoryFromAgent(agentId: string, index: number): void {
-  const agents = agentsStore.get('agents') ?? seedBuiltIns();
+  const agents = agentsStore().get('agents') ?? seedBuiltIns();
   const idx = agents.findIndex((a) => a.id === agentId);
   if (idx === -1) return;
   agents[idx].memories.splice(index, 1);
-  agentsStore.set('agents', agents);
+  agentsStore().set('agents', agents);
 }
 
 export function clearMemoriesForAgent(agentId: string): void {
-  const agents = agentsStore.get('agents') ?? seedBuiltIns();
+  const agents = agentsStore().get('agents') ?? seedBuiltIns();
   const idx = agents.findIndex((a) => a.id === agentId);
   if (idx === -1) return;
   agents[idx].memories = [];
-  agentsStore.set('agents', agents);
+  agentsStore().set('agents', agents);
 }
 
 /**

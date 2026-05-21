@@ -48,11 +48,19 @@ interface MCPSchema {
 }
 
 const encryptionKey = machineIdSync(true).slice(0, 32);
-const mcpStore = new Store<MCPSchema>({
-  name: 'claude-buddy-mcp',
-  encryptionKey,
-  defaults: { configs: [] },
-});
+// Lazy-init — see electron/store.ts for why. Same caveat applies here.
+let _mcpStore: Store<MCPSchema> | null = null;
+function mcpStore(): Store<MCPSchema> {
+  if (!_mcpStore) {
+    _mcpStore = new Store<MCPSchema>({
+      name: 'claude-buddy-mcp',
+      encryptionKey,
+      defaults: { configs: [] },
+    });
+  }
+  return _mcpStore;
+}
+export function initMcpStore(): void { mcpStore(); }
 
 // ─── In-memory runtime state ────────────────────────────────────────────────
 
@@ -134,7 +142,7 @@ function ensureUniquePrefix(prefix: string, excludeId?: string): string {
 }
 
 export function listConfigs(): MCPServerConfig[] {
-  return mcpStore.get('configs') ?? [];
+  return mcpStore().get('configs') ?? [];
 }
 
 export function addConfig(input: Omit<MCPServerConfig, 'id' | 'prefix'>): MCPServerConfig {
@@ -143,7 +151,7 @@ export function addConfig(input: Omit<MCPServerConfig, 'id' | 'prefix'>): MCPSer
   const config: MCPServerConfig = { ...input, id, prefix };
   const configs = listConfigs();
   configs.push(config);
-  mcpStore.set('configs', configs);
+  mcpStore().set('configs', configs);
   // Initialize runtime entry as 'stopped'
   runtime.set(id, { config, state: stopped(id), tools: [] });
   notifyStates();
@@ -159,7 +167,7 @@ export function updateConfig(id: string, patch: Partial<Omit<MCPServerConfig, 'i
     merged.prefix = ensureUniquePrefix(sanitizeName(patch.name), id);
   }
   configs[idx] = merged;
-  mcpStore.set('configs', configs);
+  mcpStore().set('configs', configs);
   const entry = runtime.get(id);
   if (entry) entry.config = merged;
   return merged;
@@ -167,7 +175,7 @@ export function updateConfig(id: string, patch: Partial<Omit<MCPServerConfig, 'i
 
 export function deleteConfig(id: string): void {
   const configs = listConfigs().filter((c) => c.id !== id);
-  mcpStore.set('configs', configs);
+  mcpStore().set('configs', configs);
   // Stop and remove runtime
   void stopServer(id).catch(() => {});
   runtime.delete(id);
