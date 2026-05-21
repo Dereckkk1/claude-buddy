@@ -2,7 +2,10 @@ import { app, BrowserWindow, session, screen, dialog } from 'electron';
 import path from 'node:path';
 import { stat as fsStat } from 'node:fs/promises';
 import { basename, resolve as resolvePath } from 'node:path';
-import { listFolder, readFile as readFileFs, pathIsWithin } from './files';
+import {
+  listFolder, readFile as readFileFs, pathIsWithin,
+  countFolderEntries, readImageAsAttachment, isSensitiveFolder,
+} from './files';
 import { runPowerShell } from './shell';
 import * as mcp from './mcp';
 import { createMascotWindow } from './window-manager';
@@ -238,7 +241,24 @@ function bootstrap() {
       if (r.canceled || !r.filePaths[0]) return null;
       const p = r.filePaths[0];
       const s = await fsStat(p).catch(() => null);
-      return { path: p, name: basename(p), size: s?.size ?? 0 };
+      const { entryCount, truncated } = await countFolderEntries(p).catch(() => ({ entryCount: 0, truncated: false }));
+      const sensitive = isSensitiveFolder(p);
+      return {
+        path: p,
+        name: basename(p),
+        size: s?.size ?? 0,
+        entryCount,
+        truncated,
+        sensitive,
+      };
+    },
+    'files:read-image-as-attachment': async (filePath: string) => {
+      try {
+        return await readImageAsAttachment(filePath);
+      } catch (e) {
+        console.error('[files] read-image-as-attachment failed:', filePath, e);
+        return null;
+      }
     },
     'mcp:list-configs':   () => mcp.listConfigs(),
     'mcp:add-config':     (input) => mcp.addConfig(input),
@@ -259,16 +279,31 @@ function bootstrap() {
       }
     },
     'files:resolve-dropped': async (paths) => {
-      const out = [] as Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;
+      const out = [] as Array<{
+        path: string; kind: 'file' | 'folder'; name: string; size: number;
+        entryCount?: number; truncated?: boolean;
+      }>;
       for (const p of paths) {
         const s = await fsStat(p).catch(() => null);
         if (!s) continue;
-        out.push({
-          path: p,
-          kind: s.isDirectory() ? 'folder' : 'file',
-          name: basename(p),
-          size: s.isDirectory() ? 0 : s.size,
-        });
+        if (s.isDirectory()) {
+          const { entryCount, truncated } = await countFolderEntries(p).catch(() => ({ entryCount: 0, truncated: false }));
+          out.push({
+            path: p,
+            kind: 'folder',
+            name: basename(p),
+            size: 0,
+            entryCount,
+            truncated,
+          });
+        } else {
+          out.push({
+            path: p,
+            kind: 'file',
+            name: basename(p),
+            size: s.size,
+          });
+        }
       }
       return out;
     },

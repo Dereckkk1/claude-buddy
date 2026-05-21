@@ -51,7 +51,31 @@ export const EN = {
     folder: 'Folder',
     folderSub: 'attach a whole folder for the agent to read',
     dropHere: 'Drop to attach',
+    dropHereRich: 'Drop to attach — PDF, DOCX, MD, TXT, images, folders',
     folderItemSuffix: '(folder)',
+    // Headers above the two chip lists when both kinds of attachments exist
+    ephemeralHeader: 'For this message',
+    persistentHeader: 'Available to the agent',
+    // Folder entry-count chip ("📁 src · 1247 files" / "(200 accessible)")
+    folderEntries: '{n} files',
+    folderEntriesTruncated: '({n} accessible)',
+    // Size-cap errors surfaced by the picker
+    imageTooLarge: 'Image too large — limit is 5MB.',
+    pdfTooLarge: 'PDF too large — limit is 30MB.',
+    docxTooLarge: 'DOCX too large — limit is 15MB.',
+    fileTooLarge: 'File too large.',
+    // Multi-drop confirmation
+    confirmMany: 'You are attaching {n} files — confirm?',
+    // Empty-clipboard rich message + screenshot CTA
+    emptyRich: 'Copy text or an image first (Ctrl+C), then come back.',
+    emptyShootCta: 'Take a screenshot',
+    // Sensitive folder warning
+    sensitiveWarning: 'You are attaching "{name}" — a sensitive folder. The agent will be able to read everything inside. Continue?',
+  },
+
+  // Screenshot overlay
+  capture: {
+    escHint: 'ESC to cancel — drag to select',
   },
 
   // Response view
@@ -365,7 +389,24 @@ export const PT: StringDict = {
     folder: 'Pasta',
     folderSub: 'anexa uma pasta inteira pro agente ler',
     dropHere: 'Solte aqui',
+    dropHereRich: 'Solte para anexar — PDF, DOCX, MD, TXT, imagens, pastas',
     folderItemSuffix: '(pasta)',
+    ephemeralHeader: 'Para esta mensagem',
+    persistentHeader: 'Disponível para o agente',
+    folderEntries: '{n} arquivos',
+    folderEntriesTruncated: '({n} acessíveis)',
+    imageTooLarge: 'Imagem muito grande — limite é 5MB.',
+    pdfTooLarge: 'PDF muito grande — limite é 30MB.',
+    docxTooLarge: 'DOCX muito grande — limite é 15MB.',
+    fileTooLarge: 'Arquivo muito grande.',
+    confirmMany: 'Você está anexando {n} arquivos — confirmar?',
+    emptyRich: 'Copie texto ou uma imagem primeiro (Ctrl+C), depois volte aqui.',
+    emptyShootCta: 'Tirar print',
+    sensitiveWarning: 'Você está anexando "{name}" — uma pasta sensível. O agente vai poder ler tudo lá dentro. Continuar?',
+  },
+
+  capture: {
+    escHint: 'ESC para cancelar — arraste pra selecionar',
   },
 
   response: {
@@ -666,7 +707,24 @@ export const ES: StringDict = {
     folder: 'Carpeta',
     folderSub: 'adjunta una carpeta entera para que el agente lea',
     dropHere: 'Suelta aquí',
+    dropHereRich: 'Suelta para adjuntar — PDF, DOCX, MD, TXT, imágenes, carpetas',
     folderItemSuffix: '(carpeta)',
+    ephemeralHeader: 'Para este mensaje',
+    persistentHeader: 'Disponible para el agente',
+    folderEntries: '{n} archivos',
+    folderEntriesTruncated: '({n} accesibles)',
+    imageTooLarge: 'Imagen demasiado grande — el límite es 5MB.',
+    pdfTooLarge: 'PDF demasiado grande — el límite es 30MB.',
+    docxTooLarge: 'DOCX demasiado grande — el límite es 15MB.',
+    fileTooLarge: 'Archivo demasiado grande.',
+    confirmMany: 'Vas a adjuntar {n} archivos — ¿confirmar?',
+    emptyRich: 'Copia texto o una imagen primero (Ctrl+C), después vuelve aquí.',
+    emptyShootCta: 'Hacer captura',
+    sensitiveWarning: 'Estás adjuntando "{name}" — una carpeta sensible. El agente podrá leer todo lo de dentro. ¿Continuar?',
+  },
+
+  capture: {
+    escHint: 'ESC para cancelar — arrastra para seleccionar',
   },
 
   response: {
