@@ -94,6 +94,7 @@ export interface StreamCallbacks {
   onToolUse?: (name: string, input: Record<string, unknown>) => void;
   onToolResult?: (name: string, result: ToolResult) => void;
   onModelPicked?: (model: string) => void;
+  signal?: AbortSignal;
 }
 
 function attachmentsToBlocks(attachments: Attachment[]): ContentBlock[] {
@@ -170,6 +171,13 @@ export async function chatWithSkills(
   ].join('\n\n');
 
   for (let iter = 0; iter < 6; iter++) {
+    // Abort fast path: if the caller cancelled between iterations, surface as
+    // an AbortError so the App-level handler can suppress error UI.
+    if (callbacks.signal?.aborted) {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
     try {
       // Merge native tools + web_search (server-side) + any MCP tools that
       // are currently advertised by running servers. Reusing mcpTools from
@@ -185,7 +193,7 @@ export async function chatWithSkills(
         system,
         tools: [...TOOLS, WEB_SEARCH_TOOL, ...mcpToolDefs] as never,
         messages: apiMessages as never,
-      });
+      }, callbacks.signal ? { signal: callbacks.signal } : undefined);
 
       let textOut = '';
       const toolUses: { id: string; name: string; input: Record<string, unknown> }[] = [];
@@ -260,6 +268,14 @@ export async function chatWithSkills(
       }
       apiMessages.push({ role: 'user', content: toolResults });
     } catch (e) {
+      // Propagate abort errors unchanged — the caller distinguishes between
+      // user-initiated stops (no UI error) and real failures.
+      const errLike = e as { name?: string; message?: string };
+      if (errLike?.name === 'AbortError' || /aborted|abort/i.test(errLike?.message ?? '')) {
+        const ab = new Error('aborted');
+        ab.name = 'AbortError';
+        throw ab;
+      }
       console.error('[claude.ts] chatWithSkills error:', e);
       const err = e as { status?: number; message?: string };
       if (err.status === 401) throw new Error('INVALID_API_KEY');

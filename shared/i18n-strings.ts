@@ -64,6 +64,18 @@ export const EN = {
     quickReplyExplain: 'explain more',
     quickReplyExample: 'give me a practical example',
     quickReplySummarize: 'summarize in one sentence',
+    // New UX strings (P0/P1/P2 wave)
+    regenerate: '↻ regenerate',
+    quickReplyRegenerate: 'regenerate',
+    expand: 'expand',
+    collapsedHint: '↳ previous answer',
+    copy: 'copy',
+    copied: 'copied',
+    stop: '◼ stop',
+    tryAgain: '↻ try again',
+    openConfig: 'Open config',
+    turnPrefix: 'T',
+    modelTooltip: 'model picked automatically by question complexity (haiku = simple, sonnet = complex)',
   },
 
   // Tool/step labels
@@ -377,6 +389,18 @@ export const PT: StringDict = {
     quickReplyExplain: 'explica melhor isso',
     quickReplyExample: 'me dá um exemplo prático',
     quickReplySummarize: 'resume em 1 frase',
+    // New UX strings (P0/P1/P2 wave)
+    regenerate: '↻ refazer',
+    quickReplyRegenerate: 'refazer',
+    expand: 'expandir',
+    collapsedHint: '↳ resposta anterior',
+    copy: 'copiar',
+    copied: 'copiado',
+    stop: '◼ parar',
+    tryAgain: '↻ tentar de novo',
+    openConfig: 'Abrir config',
+    turnPrefix: 'T',
+    modelTooltip: 'modelo escolhido automaticamente pela complexidade da pergunta (haiku = simples, sonnet = complexa)',
   },
 
   steps: {
@@ -678,6 +702,18 @@ export const ES: StringDict = {
     quickReplyExplain: 'explícame mejor eso',
     quickReplyExample: 'dame un ejemplo práctico',
     quickReplySummarize: 'resume en una frase',
+    // New UX strings (P0/P1/P2 wave)
+    regenerate: '↻ rehacer',
+    quickReplyRegenerate: 'rehacer',
+    expand: 'expandir',
+    collapsedHint: '↳ respuesta anterior',
+    copy: 'copiar',
+    copied: 'copiado',
+    stop: '◼ parar',
+    tryAgain: '↻ reintentar',
+    openConfig: 'Abrir config',
+    turnPrefix: 'T',
+    modelTooltip: 'modelo elegido automáticamente por la complejidad de la pregunta (haiku = simple, sonnet = compleja)',
   },
 
   steps: {
