@@ -31,6 +31,9 @@ interface ConversationState {
   attachedPaths: AttachedPath[];
   status: Status;
   error: string | null;
+  // Machine-readable error code (e.g. 'INVALID_API_KEY') — lets the UI decide
+  // which contextual actions to surface (e.g. "Open config" button).
+  errorCode: string | null;
 
   addUserMessage: (text: string) => void;
   beginAssistantMessage: () => void;
@@ -40,7 +43,7 @@ interface ConversationState {
   addAttachedPath: (p: AttachedPath) => void;
   removeAttachedPath: (id: string) => void;
   setStatus: (s: Status) => void;
-  setError: (e: string | null) => void;
+  setError: (e: string | null, code?: string | null) => void;
   reset: () => void;
 }
 
@@ -50,6 +53,7 @@ export const useConversation = create<ConversationState>((set) => ({
   attachedPaths: [],
   status: 'idle',
   error: null,
+  errorCode: null,
 
   addUserMessage: (text) =>
     set((s) => ({ messages: [...s.messages, { role: 'user', content: text }] })),
@@ -78,7 +82,7 @@ export const useConversation = create<ConversationState>((set) => ({
     set((s) => ({ attachedPaths: s.attachedPaths.filter((x) => x.id !== id) })),
 
   setStatus: (status) => set({ status }),
-  setError: (error) => set({ error }),
+  setError: (error, code) => set({ error, errorCode: code ?? null }),
 
-  reset: () => set({ messages: [], attachments: [], attachedPaths: [], status: 'idle', error: null }),
+  reset: () => set({ messages: [], attachments: [], attachedPaths: [], status: 'idle', error: null, errorCode: null }),
 }));

@@ -39,7 +39,7 @@ export default function App() {
   const t = useT();
   const [state, setState] = useState<SpriteState>('sleeping');
   const [continueCounter, setContinueCounter] = useState(0);
-  const [greeting, setGreeting] = useState(pickGreeting);
+  const [greeting, setGreeting] = useState(() => pickGreeting());
   const [agentMode, setAgentMode] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
@@ -55,18 +55,18 @@ export default function App() {
   const [pendingPreflight, setPendingPreflight] = useState<
     null | { goal: string; resolve: (ok: boolean) => void }
   >(null);
-  // Agent step counter — surfaced as "passo N/MAX" in the AgentOverlay header.
   const [agentStep, setAgentStep] = useState<{ count: number; max: number } | null>(null);
-  // Set when agent emits a "lost" cue. UI reveals a redirect input.
   const [agentLostHint, setAgentLostHint] = useState<string | null>(null);
-  // Web-search usage counter, shown next to the model chip during streaming.
   const [webSearchUses, setWebSearchUses] = useState(0);
-  // Cumulative session usage. Cost is estimated with a hardcoded table.
   const [sessionUsage, setSessionUsage] = useState<{
     inputTokens: number; outputTokens: number; estCostUsd: number; lastModel: string | null;
   }>({ inputTokens: 0, outputTokens: 0, estCostUsd: 0, lastModel: null });
-  // List of crashed MCP server ids; renders a dismissible banner in the header.
   const [crashedMcp, setCrashedMcp] = useState<string[]>(() => getCrashedServers());
+  // First-run / onboarding state.
+  const [, setSeenIntro] = useState(true);
+  const [wakeCount, setWakeCount] = useState(0);
+  const [showDragHint, setShowDragHint] = useState(false);
+  const lastSleepRef = useRef<number>(0);
   const conv = useConversation();
   const drag = useDrag();
   const abortRef = useRef<AbortController | null>(null);
@@ -105,6 +105,47 @@ export default function App() {
     return () => off('agents:changed');
   }, []);
 
+  // Load onboarding flags once. On a brand-new install with an API key already
+  // saved (i.e. user just finished config), skip the initial sleep and open
+  // the bubble with the welcome greeting.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [flags, apiKey] = await Promise.all([
+        invoke('onboarding:get-flags'),
+        invoke('config:get-api-key'),
+      ]);
+      if (cancelled) return;
+      setSeenIntro(flags.hasSeenIntro);
+      setWakeCount(flags.wakeCount);
+      if (!flags.hasSeenIntro && apiKey) {
+        // First time the mascot is shown after the user configured their key.
+        // Wake straight into the welcome bubble and persist the seen flag so
+        // it never appears again. Hard rule: even though we skip the initial
+        // sleep frame, the mascot still renders in the corner the whole time.
+        setGreeting(t('onboarding.firstRunGreeting'));
+        setState('idle');
+        await invoke('onboarding:mark-intro-seen');
+        setSeenIntro(true);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Tray tooltip mirrors the mascot animation state so users hovering on the
+  // tray icon always know what the mascot is doing. The set of channels we
+  // care about is a subset of SpriteState — we collapse 'waking' / 'talking'
+  // into the closest meaningful tooltip state.
+  useEffect(() => {
+    const trayState =
+      state === 'sleeping' ? 'sleeping'
+      : state === 'thinking' ? 'thinking'
+      : conv.status === 'error' ? 'error'
+      : 'idle';
+    void invoke('tray:set-state', trayState);
+  }, [state, conv.status]);
+
   // Speak the assistant's response when it finishes streaming, if TTS is on
   useEffect(() => {
     if (!settings?.ttsEnabled || muted) return;
@@ -133,16 +174,32 @@ export default function App() {
 
   const wake = async () => {
     if (state !== 'sleeping') return;
-    setGreeting(pickGreeting());
+    // "Back so soon?" — if the user wakes us within 2 minutes of sleeping,
+    // pull from the recentReturn pool instead of the time-of-day greeting.
+    const recentReturn = lastSleepRef.current > 0 && (Date.now() - lastSleepRef.current) < 120_000;
+    setGreeting(pickGreeting(new Date(), { recentReturn }));
     setState('waking');
     if (settings?.soundsEnabled) playWake();
     setTimeout(() => { setState((s) => (s === 'waking' ? 'idle' : s)); }, 850);
+    // Persist the wake count so we can rotate tips / show the drag hint in
+    // the first few sessions only. Local state updates immediately too.
+    try {
+      const next = await invoke('onboarding:bump-wake-count');
+      setWakeCount(next);
+      if (next <= 2) {
+        setShowDragHint(true);
+        setTimeout(() => setShowDragHint(false), 3000);
+      }
+    } catch {
+      // Non-fatal — onboarding niceties only.
+    }
   };
   const sleep = () => {
     // Abort any in-flight chat/agent stream BEFORE flipping to sleeping so
     // the network request stops mid-flight (signal is checked in the loop).
     abortRef.current?.abort();
     abortRef.current = null;
+    lastSleepRef.current = Date.now();
     setState('sleeping');
     conv.reset();
     setContinueCounter(0);
@@ -201,6 +258,7 @@ export default function App() {
         timer = setTimeout(handleTimeout, IDLE_TIMEOUT_MS);
         return;
       }
+      lastSleepRef.current = Date.now();
       setState('sleeping');
       useConversation.getState().reset();
       setContinueCounter(0);
@@ -342,7 +400,9 @@ export default function App() {
       const code = err instanceof Error ? err.message : 'UNKNOWN';
       const KNOWN = ['NETWORK', 'INVALID_API_KEY', 'RATE_LIMITED', 'API_KEY_MISSING', 'UNKNOWN'];
       const msg = KNOWN.includes(code) ? t(`errors.${code}`) : `error: ${code}`;
-      conv.setError(msg);
+      // Persist the raw code too so the bubble can render a contextual action
+      // (e.g. "Open config" only for key-related failures).
+      conv.setError(msg, KNOWN.includes(code) ? code : 'UNKNOWN');
       conv.setStatus('error');
       setState('idle');
       if (settings?.soundsEnabled) playError();
@@ -465,6 +525,30 @@ export default function App() {
           onClose={sleep}
           header={
             <>
+              {!lastAssistant && wakeCount > 0 && wakeCount <= 5 && (
+                // Tip-of-the-day: rotates through 5 hints during the first
+                // sessions, then vanishes forever once the user is acclimated.
+                <div
+                  className="cb-tip"
+                  style={{
+                    fontSize: 11, color: 'var(--ink-soft)', opacity: 0.9,
+                    marginBottom: 4, lineHeight: 1.3,
+                  }}
+                >
+                  {t(`tips.tip${((wakeCount - 1) % 5) + 1}`)}
+                </div>
+              )}
+              {!lastAssistant && showDragHint && (
+                <div
+                  className="cb-drag-hint"
+                  style={{
+                    fontSize: 10, color: 'var(--ink-soft)', opacity: 0.7,
+                    fontStyle: 'italic', marginBottom: 2,
+                  }}
+                >
+                  {t('onboarding.dragHint')}
+                </div>
+              )}
               {!lastAssistant && (
                 <span className="bubble-greeting" title={greeting}>{greeting}</span>
               )}
@@ -607,7 +691,19 @@ export default function App() {
           {conv.status === 'error' && conv.error && (
             <div className="cb-error">
               <span>{conv.error}</span>
-              <button className="cb-btn cb-btn-secondary" onClick={() => { conv.setError(null); conv.setStatus('idle'); }}>{t('response.ok')}</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {/* For API-key-related errors, offer a 1-click jump to the
+                    config window — most users won't remember the tray menu. */}
+                {(conv.errorCode === 'INVALID_API_KEY' || conv.errorCode === 'API_KEY_MISSING') && (
+                  <button
+                    className="cb-btn cb-btn-secondary"
+                    onClick={() => { void invoke('config:open'); }}
+                  >
+                    {t('errorsExtras.openConfig')}
+                  </button>
+                )}
+                <button className="cb-btn cb-btn-secondary" onClick={() => { conv.setError(null, null); conv.setStatus('idle'); }}>{t('response.ok')}</button>
+              </div>
             </div>
           )}
         </SpeechBubble>

@@ -18,8 +18,19 @@ function bonusFromDay(day: number, hour: number, pools: { monday: string[]; frid
   return [];
 }
 
-export function pickGreeting(now: Date = new Date()): string {
+export interface PickGreetingOpts {
+  /** Whether the user just sleep/woke very quickly — pick a teasing line. */
+  recentReturn?: boolean;
+}
+
+export function pickGreeting(now: Date = new Date(), opts: PickGreetingOpts = {}): string {
   const greetings = dict(getLocale()).greeting;
+  // Special-case: if the user woke us up again almost immediately, pull from
+  // the dedicated "wait, you again?" pool. Falls back to default if missing.
+  if (opts.recentReturn && Array.isArray(greetings.recentReturn) && greetings.recentReturn.length > 0) {
+    const pool = greetings.recentReturn;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
   const hour = now.getHours();
   const day = now.getDay();
   const pool = [

@@ -14,7 +14,13 @@ export function ConfigApp() {
     }
     setSaving(true);
     await invoke('config:set-api-key', key);
-    window.close();
+    // Hand off to main: it starts the mascot (already awake) and closes us.
+    // The renderer then shows the welcome bubble using `hasSeenIntro=false`.
+    await invoke('onboarding:first-run-done');
+  };
+
+  const openKeysPage = () => {
+    void invoke('shell:open-external', 'https://console.anthropic.com/settings/keys');
   };
 
   return (
@@ -31,9 +37,24 @@ export function ConfigApp() {
         value={key}
         onChange={(e) => setKey(e.target.value)}
       />
-      <button onClick={handleSave} disabled={saving || !key}>
-        {saving ? t('config.saving') : t('config.save')}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <button onClick={handleSave} disabled={saving || !key}>
+          {saving ? t('config.saving') : t('config.save')}
+        </button>
+        <a
+          href="#"
+          onClick={(e) => { e.preventDefault(); openKeysPage(); }}
+          style={{
+            fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none',
+            borderBottom: '1px solid var(--ink-soft)', paddingBottom: 1,
+          }}
+        >
+          {t('configExtras.noKeyLink')}
+        </a>
+      </div>
+      <p className="small" style={{ marginTop: 14, fontSize: 11.5, opacity: 0.8 }}>
+        {t('configExtras.costNote')}
+      </p>
     </div>
   );
 }

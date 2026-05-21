@@ -7,6 +7,9 @@ interface Schema {
   memories?: string[];
   settings?: AppSettings;
   runCommandAllowlist?: string[];
+  hasSeenIntro?: boolean;
+  wakeCount?: number;
+  lastBootNotificationDate?: string; // ISO date (YYYY-MM-DD)
 }
 
 export type Locale = 'en' | 'pt' | 'es';
@@ -134,7 +137,6 @@ export function matchesRunCommandAllowlist(command: string): boolean {
     if (p.endsWith('*')) {
       const head = p.slice(0, -1).trim();
       if (!head) continue;
-      // "npm test*" → match if command starts with "npm test" (token-aware).
       const headTokens = head.split(/\s+/);
       const cmdTokens = command.trim().toLowerCase().split(/\s+/);
       if (cmdTokens.length < headTokens.length) continue;
@@ -152,4 +154,37 @@ export function matchesRunCommandAllowlist(command: string): boolean {
     }
   }
   return false;
+}
+
+// ─── onboarding & wake tracking ─────────────────────────────────────────────
+// True only the very first time the app boots (before any settings have been
+// persisted). Used to seed defaults from the OS (e.g. detected locale).
+export function isFirstBoot(): boolean {
+  return !store.has('settings');
+}
+
+export function hasSeenIntro(): boolean {
+  return store.get('hasSeenIntro') ?? false;
+}
+
+export function markIntroSeen(): void {
+  store.set('hasSeenIntro', true);
+}
+
+export function getWakeCount(): number {
+  return store.get('wakeCount') ?? 0;
+}
+
+export function bumpWakeCount(): number {
+  const next = (store.get('wakeCount') ?? 0) + 1;
+  store.set('wakeCount', next);
+  return next;
+}
+
+export function getLastBootNotificationDate(): string | null {
+  return store.get('lastBootNotificationDate') ?? null;
+}
+
+export function setLastBootNotificationDate(iso: string): void {
+  store.set('lastBootNotificationDate', iso);
 }
