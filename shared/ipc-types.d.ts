@@ -186,6 +186,8 @@ export interface IpcRequests {
         kind: 'image';
         mimeType: string;
         base64: string;
+    } | {
+        error: string;
     } | null;
     'files:list-folder': (params: {
         path: string;
@@ -211,13 +213,23 @@ export interface IpcRequests {
         path: string;
         name: string;
         size: number;
+        entryCount?: number;
+        truncated?: boolean;
+        sensitive?: boolean;
     } | null;
     'files:resolve-dropped': (paths: string[]) => Array<{
         path: string;
         kind: 'file' | 'folder';
         name: string;
         size: number;
+        entryCount?: number;
+        truncated?: boolean;
     }>;
+    'files:read-image-as-attachment': (path: string) => {
+        kind: 'image';
+        mimeType: string;
+        base64: string;
+    } | null;
     'shell:run-command': (params: {
         command: string;
         cwd?: string;

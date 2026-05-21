@@ -412,8 +412,6 @@ export default function App() {
     const controller = new AbortController();
     abortRef.current = controller;
     let firstChunkSeen = false;
-    const controller = new AbortController();
-    abortRef.current = controller;
     try {
       const snapshotMessages = useConversation.getState().messages;
       const snapshotAttachments = useConversation.getState().attachments;
