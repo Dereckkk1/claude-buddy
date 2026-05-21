@@ -21,6 +21,7 @@ import {
 import type { AppSettingsDTO } from '@shared/ipc-types';
 import { runAgent, type AgentEvent } from './services/agent';
 import { invoke, on, off } from './services/ipc';
+import { getCrashedServers } from './services/mcp-tools-cache';
 import { useDrag } from './hooks/useDrag';
 import { useTheme } from './hooks/useTheme';
 import { pickGreeting } from './services/greetings';
@@ -49,6 +50,23 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettingsDTO | null>(null);
   const [muted, setMuted] = useState(false);
   const [activeAgent, setActiveAgent] = useState<AgentDTO | null>(null);
+  // Computer-use preflight confirmation modal. When set, the agent loop is
+  // blocked waiting on the user clicking Yes/No.
+  const [pendingPreflight, setPendingPreflight] = useState<
+    null | { goal: string; resolve: (ok: boolean) => void }
+  >(null);
+  // Agent step counter — surfaced as "passo N/MAX" in the AgentOverlay header.
+  const [agentStep, setAgentStep] = useState<{ count: number; max: number } | null>(null);
+  // Set when agent emits a "lost" cue. UI reveals a redirect input.
+  const [agentLostHint, setAgentLostHint] = useState<string | null>(null);
+  // Web-search usage counter, shown next to the model chip during streaming.
+  const [webSearchUses, setWebSearchUses] = useState(0);
+  // Cumulative session usage. Cost is estimated with a hardcoded table.
+  const [sessionUsage, setSessionUsage] = useState<{
+    inputTokens: number; outputTokens: number; estCostUsd: number; lastModel: string | null;
+  }>({ inputTokens: 0, outputTokens: 0, estCostUsd: 0, lastModel: null });
+  // List of crashed MCP server ids; renders a dismissible banner in the header.
+  const [crashedMcp, setCrashedMcp] = useState<string[]>(() => getCrashedServers());
   const conv = useConversation();
   const drag = useDrag();
   const abortRef = useRef<AbortController | null>(null);
@@ -121,12 +139,24 @@ export default function App() {
     setTimeout(() => { setState((s) => (s === 'waking' ? 'idle' : s)); }, 850);
   };
   const sleep = () => {
+    // Abort any in-flight chat/agent stream BEFORE flipping to sleeping so
+    // the network request stops mid-flight (signal is checked in the loop).
+    abortRef.current?.abort();
+    abortRef.current = null;
     setState('sleeping');
     conv.reset();
     setContinueCounter(0);
     setAgentEvents([]);
     setAgentRunning(false);
     setShowAttachPicker(false);
+    setAgentStep(null);
+    setAgentLostHint(null);
+    setWebSearchUses(0);
+    setPendingPreflight((prev) => {
+      // Resolve any in-flight preflight prompt as denied so the agent unwinds.
+      prev?.resolve(false);
+      return null;
+    });
     // Any pending shell-command approval cards get auto-cancelled — releases
     // the agent's tool call so it doesn't hang on the API side.
     clearAllApprovals();
@@ -140,6 +170,26 @@ export default function App() {
     return () => off('hotkey:activate');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
+
+  // Global panic key (Ctrl+Shift+Esc) — abort whatever the agent is doing.
+  useEffect(() => {
+    const handler = () => {
+      if (agentRunning) stopAgent();
+      // Also abort any normal chat stream that happens to be in-flight.
+      abortRef.current?.abort();
+    };
+    on('agent:panic', handler);
+    return () => off('agent:panic');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentRunning]);
+
+  // Reflect MCP server state changes (crashes) in the banner. We pull straight
+  // from the cache after each `mcp:states-changed` broadcast.
+  useEffect(() => {
+    const handler = () => setCrashedMcp(getCrashedServers());
+    on('mcp:states-changed', handler);
+    return () => off('mcp:states-changed');
+  }, []);
 
   useEffect(() => {
     if (state === 'sleeping' || agentRunning) return;
@@ -174,6 +224,8 @@ export default function App() {
     setAgentEvents([{ type: 'status', message: t('agent.starting') }]);
     setAgentStatus(t('agent.starting'));
     setAgentRunning(true);
+    setAgentStep(null);
+    setAgentLostHint(null);
     setState('thinking');
     const controller = new AbortController();
     abortRef.current = controller;
@@ -181,9 +233,17 @@ export default function App() {
       await runAgent({
         goal,
         signal: controller.signal,
+        requestPreflightConfirm: (g: string) =>
+          new Promise<boolean>((resolve) => setPendingPreflight({ goal: g, resolve })),
         onEvent: (e) => {
           setAgentEvents((prev) => [...prev, e]);
-          if (e.type === 'status') setAgentStatus(e.message);
+          if (e.type === 'status') {
+            setAgentStatus(e.message);
+            if (typeof e.stepCount === 'number' && typeof e.maxSteps === 'number') {
+              setAgentStep({ count: e.stepCount, max: e.maxSteps });
+            }
+          }
+          if (e.type === 'lost') setAgentLostHint(e.message);
           if (e.type === 'done') setAgentStatus(t('agent.done'));
           if (e.type === 'error') setAgentStatus(t('agent.error'));
         },
@@ -210,8 +270,11 @@ export default function App() {
     conv.addUserMessage(text);
     conv.setStatus('thinking');
     setState('thinking');
+    setWebSearchUses(0);
     if (settings?.soundsEnabled) playSend();
     let firstChunkSeen = false;
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const snapshotMessages = useConversation.getState().messages;
       const snapshotAttachments = useConversation.getState().attachments;
@@ -228,17 +291,49 @@ export default function App() {
           conv.appendAssistantChunk(chunk);
         },
         onModelPicked: (m) => setModelLabel(m.includes('sonnet') ? 'sonnet' : 'haiku'),
-        onToolUse: (name) => {
+        onWebSearchUse: (count) => setWebSearchUses(count),
+        onUsage: ({ inputTokens, outputTokens, model }) => {
+          // Estimate cost with hardcoded per-Mtok rates. Numbers chosen so the
+          // user sees a ballpark — we don't try to bill them.
+          const rates = model.includes('sonnet')
+            ? { inUsdPerMtok: 3, outUsdPerMtok: 15 }
+            : { inUsdPerMtok: 1, outUsdPerMtok: 5 };
+          const turnCost =
+            (inputTokens / 1_000_000) * rates.inUsdPerMtok +
+            (outputTokens / 1_000_000) * rates.outUsdPerMtok;
+          setSessionUsage((prev) => ({
+            inputTokens: prev.inputTokens + inputTokens,
+            outputTokens: prev.outputTokens + outputTokens,
+            estCostUsd: prev.estCostUsd + turnCost,
+            lastModel: model,
+          }));
+        },
+        onToolUse: (name, input) => {
           if (!firstChunkSeen) {
             firstChunkSeen = true;
             conv.beginAssistantMessage();
             conv.setStatus('talking');
             setState('talking');
           }
-          conv.appendAssistantChunk(`\n\n[[step:${name}]]\n\n`);
+          // Encode the tool input args as base64 so the marker is robust to
+          // `]]` chars in JSON. The ResponseView decodes on render and shows a
+          // collapsible details block. We skip the payload when input is empty
+          // to keep the chip clean (most server-side tools like web_search).
+          const hasInput = input && Object.keys(input).length > 0;
+          if (hasInput) {
+            try {
+              const json = JSON.stringify(input);
+              const b64 = btoa(unescape(encodeURIComponent(json)));
+              conv.appendAssistantChunk(`\n\n[[step:${name}:${b64}]]\n\n`);
+            } catch {
+              conv.appendAssistantChunk(`\n\n[[step:${name}]]\n\n`);
+            }
+          } else {
+            conv.appendAssistantChunk(`\n\n[[step:${name}]]\n\n`);
+          }
           if (settings?.soundsEnabled && name === 'edit_in_place') playPasted();
         },
-      }, snapshotAttachedPaths);
+      }, snapshotAttachedPaths, controller.signal);
       while (useConversation.getState().attachments.length > 0) conv.removeAttachment(0);
       conv.setStatus('idle');
       setState('idle');
@@ -251,6 +346,9 @@ export default function App() {
       conv.setStatus('error');
       setState('idle');
       if (settings?.soundsEnabled) playError();
+    } finally {
+      // Clear the active abort handle whether we succeeded or failed.
+      if (abortRef.current === controller) abortRef.current = null;
     }
   };
 
@@ -292,7 +390,53 @@ export default function App() {
         </div>
       )}
       {state !== 'sleeping' && agentRunning && (
-        <AgentOverlay status={agentStatus} events={agentEvents} onStop={stopAgent} />
+        <AgentOverlay
+          status={agentStatus}
+          events={agentEvents}
+          onStop={stopAgent}
+          step={agentStep}
+          lostHint={agentLostHint}
+          onRedirect={(newGoal) => {
+            // Clear the lost cue and restart with the new goal. We stop the
+            // current run first so the old controller doesn't outlive us.
+            // Note: there's a small race where the old loop's `finally` may
+            // flip agentRunning off momentarily — acceptable for now.
+            setAgentLostHint(null);
+            abortRef.current?.abort();
+            setTimeout(() => startAgent(newGoal), 250);
+          }}
+        />
+      )}
+      {pendingPreflight && (
+        <div className="cb-modal-backdrop">
+          <div className="cb-modal">
+            <div className="cb-modal-title">{t('agent.preflightTitle')}</div>
+            <div className="cb-modal-body">
+              {t('agent.preflightConfirm', { goal: pendingPreflight.goal })}
+            </div>
+            <div className="cb-modal-actions">
+              <button
+                className="cb-btn cb-btn-secondary"
+                autoFocus
+                onClick={() => {
+                  pendingPreflight.resolve(false);
+                  setPendingPreflight(null);
+                }}
+              >
+                {t('agent.preflightNo')}
+              </button>
+              <button
+                className="cb-btn cb-btn-primary"
+                onClick={() => {
+                  pendingPreflight.resolve(true);
+                  setPendingPreflight(null);
+                }}
+              >
+                {t('agent.preflightYes')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {state !== 'sleeping' && !agentRunning && (
         <SpeechBubble
@@ -303,6 +447,16 @@ export default function App() {
                 <span className="bubble-greeting" title={greeting}>{greeting}</span>
               )}
               <AgentSelector active={activeAgent} onChange={(a) => { setActiveAgent(a); refreshMemoriesCache(); }} />
+              {crashedMcp.length > 0 && (
+                <button
+                  type="button"
+                  className="cb-mcp-banner"
+                  onClick={() => invoke('settings:open').catch(() => {})}
+                  title={t('mcp.banner.tooltip')}
+                >
+                  {t('mcp.banner.crashed', { n: crashedMcp.length })}
+                </button>
+              )}
             </>
           }
         >
@@ -335,8 +489,14 @@ export default function App() {
                 {modelLabel && (
                   <div style={{
                     fontSize: 10, color: 'var(--ink-soft)',
-                    fontFamily: 'SF Mono, Menlo, monospace', opacity: 0.5,
-                  }}>✦ {modelLabel}</div>
+                    fontFamily: 'SF Mono, Menlo, monospace', opacity: 0.6,
+                  }}>
+                    ✦ {modelLabel}
+                    {webSearchUses > 0 && ` · web ${webSearchUses}/3`}
+                    {sessionUsage.inputTokens + sessionUsage.outputTokens > 0 && (
+                      ` · ${formatTokens(sessionUsage.inputTokens + sessionUsage.outputTokens)} tok · $${sessionUsage.estCostUsd.toFixed(3)}`
+                    )}
+                  </div>
                 )}
               </div>
             </>
@@ -402,4 +562,10 @@ export default function App() {
       <Mascot state={state} onClick={wake} onMouseDown={drag.onMouseDown} />
     </div>
   );
+}
+
+function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
 }

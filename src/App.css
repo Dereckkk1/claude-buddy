@@ -743,3 +743,110 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 @keyframes cb-cmd-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Destructive command card — red border + tinted bg to wake the user up */
+.cb-cmd-card-danger {
+  border-color: #c0392b !important;
+  background: #fff5f3 !important;
+  box-shadow: 0 0 0 1px rgba(192, 57, 43, 0.15);
+}
+:root[data-theme="dark"] .cb-cmd-card-danger {
+  background: #2a1816 !important;
+}
+.cb-cmd-card-warning {
+  display: flex; gap: 6px; align-items: center;
+  font-size: 12px; color: #c0392b; font-weight: 500;
+  padding: 6px 10px; background: rgba(192, 57, 43, 0.08);
+  border-radius: 6px;
+}
+
+.cb-cmd-card-allowlist {
+  display: flex; gap: 6px; align-items: center;
+  font-size: 11.5px; color: var(--ink-soft);
+  cursor: pointer; user-select: none;
+}
+.cb-cmd-card-allowlist input { cursor: pointer; }
+.cb-cmd-card-allowlist code {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px; background: #f5f4ee; padding: 1px 5px; border-radius: 3px;
+}
+
+.cb-cmd-card-running-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; font-size: 11.5px; color: var(--ink-soft);
+  margin-top: 2px;
+}
+.cb-cmd-card-running-actions { display: flex; gap: 6px; }
+.cb-cmd-card-running-actions .cb-btn { padding: 4px 10px; font-size: 11px; }
+
+/* Step chip with input details (debug-friendly tool args) */
+.cb-step-toggle, .cb-step-action {
+  background: none; border: none; cursor: pointer;
+  color: var(--clay-dark, #c97551); font-size: 11px; padding: 0 4px;
+  font-family: inherit; margin-left: 4px;
+}
+.cb-step-toggle:hover, .cb-step-action:hover { text-decoration: underline; }
+.cb-step-action:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+.cb-step-input {
+  margin: 6px 0 0; padding: 8px 10px;
+  font-size: 11px; line-height: 1.45;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  background: #f5f4ee; border-radius: 6px;
+  max-height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+  color: #141413;
+}
+:root[data-theme="dark"] .cb-step-input { background: #20211e; color: var(--offwhite); }
+
+/* MCP crash banner in the bubble header */
+.cb-mcp-banner {
+  background: rgba(192, 57, 43, 0.12);
+  color: #c0392b;
+  border: 1px solid rgba(192, 57, 43, 0.3);
+  padding: 3px 8px; font-size: 11px; font-weight: 500;
+  border-radius: 8px; cursor: pointer;
+  font-family: inherit;
+}
+.cb-mcp-banner:hover { background: rgba(192, 57, 43, 0.2); }
+
+/* Modal (preflight confirm) */
+.cb-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(20, 20, 19, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000;
+}
+.cb-modal {
+  background: var(--bg-elevated, #fafaf6);
+  border-radius: 14px; padding: 20px 22px;
+  max-width: 360px; width: 90%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.cb-modal-title { font-weight: 600; font-size: 14px; color: var(--ink); }
+.cb-modal-body { font-size: 13px; color: var(--ink); line-height: 1.5; }
+.cb-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+/* Agent overlay extras */
+.agent-step-counter {
+  font-size: 11px; color: var(--ink-soft);
+  margin-left: 6px; font-family: "SF Mono", Menlo, monospace;
+}
+.agent-redirect {
+  margin-top: 8px; padding: 8px 10px;
+  background: var(--clay-soft, rgba(217, 119, 87, 0.12));
+  border-radius: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.agent-redirect-text { font-size: 12px; color: var(--clay-dark, #c97551); }
+.agent-redirect-row { display: flex; gap: 6px; }
+.agent-redirect-input {
+  flex: 1; padding: 6px 8px; font-size: 12px;
+  border: 1px solid var(--border, #e8e6dc); border-radius: 6px;
+  background: var(--bg-elevated, #fff); color: var(--ink);
+  font-family: inherit;
+}
+.agent-redirect-input:focus { outline: none; border-color: var(--clay); }
+
+/* Save-memory chip in ResponseView */
+.cb-step-save-memory { color: var(--ink); }
+.cb-step-edit-undo { color: var(--ink); }

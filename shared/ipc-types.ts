@@ -77,8 +77,17 @@ export interface IpcRequests {
   'files:pick-folder': () => { path: string; name: string; size: number } | null;
   'files:resolve-dropped': (paths: string[]) =>
     Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;
-  'shell:run-command': (params: { command: string; cwd?: string; timeoutMs?: number }) =>
+  'shell:run-command': (params: { command: string; cwd?: string; timeoutMs?: number; runId?: string }) =>
     { ok: true; result: import('../electron/shell').RunResult } | { ok: false; error: string };
+  'shell:kill-command': (id: string) => { ok: boolean };
+  'shell:extend-timeout': (params: { id: string; deltaMs: number }) => { ok: boolean };
+  'shell:allowlist-add': (pattern: string) => string[];
+  'shell:allowlist-list': () => string[];
+  'shell:allowlist-match': (command: string) => boolean;
+  'clipboard:read-text-for-undo': () => string | null;
+  'automation:register-undo-paste': (params: { token: string; original: string }) => void;
+  'automation:undo-paste': (token: string) => { ok: boolean };
+  'agent:panic-abort': () => void;
 
   // MCP (Model Context Protocol)
   'mcp:list-configs':   () => import('./mcp-types').MCPServerConfig[];

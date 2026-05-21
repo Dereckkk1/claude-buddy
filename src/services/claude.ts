@@ -94,6 +94,10 @@ export interface StreamCallbacks {
   onToolUse?: (name: string, input: Record<string, unknown>) => void;
   onToolResult?: (name: string, result: ToolResult) => void;
   onModelPicked?: (model: string) => void;
+  /** Fires each time a web_search server-tool call is initiated (1-based count). */
+  onWebSearchUse?: (count: number) => void;
+  /** Fires once at the end of the turn with cumulative usage from finalMessage. */
+  onUsage?: (usage: { inputTokens: number; outputTokens: number; model: string }) => void;
 }
 
 function attachmentsToBlocks(attachments: Attachment[]): ContentBlock[] {
@@ -149,6 +153,7 @@ export async function chatWithSkills(
   agent: AgentDTO,
   callbacks: StreamCallbacks,
   attachedPaths: AttachedPath[] = [],
+  signal?: AbortSignal,
 ): Promise<void> {
   const client = await getClient();
   const model = modelForAgent(agent, messages, attachments);
@@ -169,7 +174,15 @@ export async function chatWithSkills(
     mcpHintBlock(mcpTools.length, mcpServerNames),
   ].join('\n\n');
 
+  // Web-search citations accumulated across all loop iterations for this turn.
+  // Rendered at the very end as a "Fontes:" block appended via onChunk.
+  const citationsForTurn: Array<{ url: string; title: string }> = [];
+  let webSearchCount = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
   for (let iter = 0; iter < 6; iter++) {
+    if (signal?.aborted) return;
     try {
       // Merge native tools + web_search (server-side) + any MCP tools that
       // are currently advertised by running servers. Reusing mcpTools from
@@ -193,6 +206,10 @@ export async function chatWithSkills(
       let currentTool: { id: string; name: string } | null = null;
 
       for await (const event of stream) {
+        if (signal?.aborted) {
+          // Best effort — server may keep sending events briefly, but we ignore them.
+          break;
+        }
         if (event.type === 'content_block_start') {
           if (event.content_block.type === 'tool_use') {
             currentTool = { id: event.content_block.id, name: event.content_block.name };
@@ -202,11 +219,35 @@ export async function chatWithSkills(
             // the UI indicator — no local execution, no tool_result to push back.
             const block = event.content_block as unknown as { name: string };
             callbacks.onToolUse?.(block.name, {});
+            if (block.name === 'web_search') {
+              webSearchCount++;
+              callbacks.onWebSearchUse?.(webSearchCount);
+            }
+          } else if ((event.content_block as unknown as { type: string }).type === 'web_search_tool_result') {
+            // Inline citations come attached to text deltas later — here we just
+            // pluck any URL/title pairs from the result block (SDK shape varies).
+            const block = event.content_block as unknown as {
+              content?: Array<{ type?: string; url?: string; title?: string }>;
+            };
+            if (Array.isArray(block.content)) {
+              for (const c of block.content) {
+                if (c && typeof c.url === 'string' && c.url) {
+                  citationsForTurn.push({ url: c.url, title: c.title || c.url });
+                }
+              }
+            }
           }
         } else if (event.type === 'content_block_delta') {
           if (event.delta.type === 'text_delta') {
             textOut += event.delta.text;
             callbacks.onChunk(event.delta.text);
+            // Some SDK versions attach `citation` to text_delta; capture if present.
+            const cd = event.delta as unknown as {
+              citation?: { url?: string; title?: string };
+            };
+            if (cd.citation && typeof cd.citation.url === 'string' && cd.citation.url) {
+              citationsForTurn.push({ url: cd.citation.url, title: cd.citation.title || cd.citation.url });
+            }
           } else if (event.delta.type === 'input_json_delta') {
             currentToolJson += event.delta.partial_json;
           }
@@ -222,17 +263,26 @@ export async function chatWithSkills(
 
       const final = await stream.finalMessage();
       apiMessages.push({ role: 'assistant', content: final.content });
+      if (final.usage) {
+        totalInputTokens += final.usage.input_tokens ?? 0;
+        totalOutputTokens += final.usage.output_tokens ?? 0;
+      }
 
       if (toolUses.length === 0 || final.stop_reason === 'end_turn') {
+        emitCitationsAndUsage(callbacks, citationsForTurn, totalInputTokens, totalOutputTokens, model);
         return;
       }
 
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const tu of toolUses) {
+        if (signal?.aborted) return;
         callbacks.onToolUse?.(tu.name, tu.input);
         try {
           const result = await executeTool(tu.name, tu.input);
           callbacks.onToolResult?.(tu.name, result);
+          // Stream the per-tool UI marker (e.g. undo chip for edit_in_place,
+          // expanded chip for save_memory) into the assistant message.
+          if (result.uiMarker) callbacks.onChunk(`\n\n${result.uiMarker}\n\n`);
           if (result.imageResult) {
             toolResults.push({
               type: 'tool_result',
@@ -267,5 +317,30 @@ export async function chatWithSkills(
       if (err.message?.includes('fetch')) throw new Error('NETWORK');
       throw new Error('UNKNOWN');
     }
+  }
+  emitCitationsAndUsage(callbacks, citationsForTurn, totalInputTokens, totalOutputTokens, model);
+}
+
+function emitCitationsAndUsage(
+  callbacks: StreamCallbacks,
+  citations: Array<{ url: string; title: string }>,
+  inputTokens: number,
+  outputTokens: number,
+  model: string,
+): void {
+  // De-dup citations by URL (preserve insertion order).
+  const seen = new Set<string>();
+  const unique: Array<{ url: string; title: string }> = [];
+  for (const c of citations) {
+    if (seen.has(c.url)) continue;
+    seen.add(c.url);
+    unique.push(c);
+  }
+  if (unique.length > 0) {
+    const lines = unique.map((c, i) => `${i + 1}. [${c.title}](${c.url})`).join('\n');
+    callbacks.onChunk(`\n\n**Fontes:**\n${lines}\n`);
+  }
+  if (inputTokens > 0 || outputTokens > 0) {
+    callbacks.onUsage?.({ inputTokens, outputTokens, model });
   }
 }

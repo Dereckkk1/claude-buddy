@@ -8,6 +8,7 @@ export interface AgentDTO {
     isBuiltIn: boolean;
     sharedMemories?: boolean;
 }
+export type Locale = 'en' | 'pt' | 'es';
 export interface AppSettingsDTO {
     autostart: boolean;
     idleTimeoutMs: number;
@@ -18,6 +19,7 @@ export interface AppSettingsDTO {
     theme: 'light' | 'dark' | 'auto';
     soundsEnabled: boolean;
     soundsVolume: number;
+    locale: Locale;
 }
 export interface IpcRequests {
     'config:get-api-key': () => string | null;
@@ -129,6 +131,88 @@ export interface IpcRequests {
         mimeType: string;
         base64: string;
     } | null;
+    'files:list-folder': (params: {
+        path: string;
+        recursive?: boolean;
+    }) => {
+        ok: true;
+        listing: import('../electron/files').FolderListing;
+    } | {
+        ok: false;
+        error: string;
+    };
+    'files:read-file': (params: {
+        path: string;
+    }) => {
+        ok: true;
+        content: import('../electron/files').FileContent;
+    } | {
+        ok: false;
+        error: string;
+    };
+    'files:set-scope': (paths: string[]) => void;
+    'files:pick-folder': () => {
+        path: string;
+        name: string;
+        size: number;
+    } | null;
+    'files:resolve-dropped': (paths: string[]) => Array<{
+        path: string;
+        kind: 'file' | 'folder';
+        name: string;
+        size: number;
+    }>;
+    'shell:run-command': (params: {
+        command: string;
+        cwd?: string;
+        timeoutMs?: number;
+        runId?: string;
+    }) => {
+        ok: true;
+        result: import('../electron/shell').RunResult;
+    } | {
+        ok: false;
+        error: string;
+    };
+    'shell:kill-command': (id: string) => {
+        ok: boolean;
+    };
+    'shell:extend-timeout': (params: {
+        id: string;
+        deltaMs: number;
+    }) => {
+        ok: boolean;
+    };
+    'shell:allowlist-add': (pattern: string) => string[];
+    'shell:allowlist-list': () => string[];
+    'shell:allowlist-match': (command: string) => boolean;
+    'clipboard:read-text-for-undo': () => string | null;
+    'automation:register-undo-paste': (params: {
+        token: string;
+        original: string;
+    }) => void;
+    'automation:undo-paste': (token: string) => {
+        ok: boolean;
+    };
+    'agent:panic-abort': () => void;
+    'mcp:list-configs': () => import('./mcp-types').MCPServerConfig[];
+    'mcp:add-config': (input: Omit<import('./mcp-types').MCPServerConfig, 'id' | 'prefix'>) => import('./mcp-types').MCPServerConfig;
+    'mcp:update-config': (params: {
+        id: string;
+        patch: Partial<Omit<import('./mcp-types').MCPServerConfig, 'id'>>;
+    }) => import('./mcp-types').MCPServerConfig | null;
+    'mcp:delete-config': (id: string) => void;
+    'mcp:import-json': (rawJson: string) => {
+        added: number;
+        errors: string[];
+    };
+    'mcp:list-states': () => import('./mcp-types').MCPServerState[];
+    'mcp:restart-server': (id: string) => Promise<void>;
+    'mcp:list-tools': () => import('./mcp-types').MCPToolDef[];
+    'mcp:call-tool': (params: {
+        prefixedName: string;
+        input: Record<string, unknown>;
+    }) => import('./mcp-types').MCPCallToolResult;
 }
 export interface IpcEvents {
     'hotkey:activate': void;
