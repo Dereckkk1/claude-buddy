@@ -80,6 +80,15 @@ export interface IpcRequests {
   'shell:run-command': (params: { command: string; cwd?: string; timeoutMs?: number }) =>
     { ok: true; result: import('../electron/shell').RunResult } | { ok: false; error: string };
 
+  // Onboarding & UX state
+  'onboarding:first-run-done': () => void;
+  'onboarding:get-flags': () => { hasSeenIntro: boolean; wakeCount: number };
+  'onboarding:mark-intro-seen': () => void;
+  'onboarding:bump-wake-count': () => number;
+  'tray:set-state': (state: 'sleeping' | 'idle' | 'thinking' | 'error') => void;
+  'config:open': () => void;
+  'shell:open-external': (url: string) => void;
+
   // MCP (Model Context Protocol)
   'mcp:list-configs':   () => import('./mcp-types').MCPServerConfig[];
   'mcp:add-config':     (input: Omit<import('./mcp-types').MCPServerConfig, 'id' | 'prefix'>) =>

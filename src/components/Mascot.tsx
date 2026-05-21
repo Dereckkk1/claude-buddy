@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSpriteAnimation } from '@/hooks/useSpriteAnimation';
 import { renderCrab } from '@/services/crab-renderer';
 import type { SpriteState, SpriteSheetDescriptor } from '@/services/sprite-animator';
@@ -26,6 +26,9 @@ interface Props {
 export function Mascot({ state, onClick, onMouseDown }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { state: currentState, frame, setState } = useSpriteAnimation(descriptor);
+  // Hint at the affordance: 'grab' invites drag, 'grabbing' confirms it.
+  // Falls back to 'pointer' for the sleeping/click-to-wake case.
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => { setState(state); }, [state, setState]);
 
@@ -37,15 +40,27 @@ export function Mascot({ state, onClick, onMouseDown }: Props) {
     renderCrab({ ctx, size: { w: GRID_W, h: GRID_H }, scale: SCALE, state: currentState, frame });
   }, [frame, currentState]);
 
+  // Listen on window for mouseup so we always release the grabbing cursor —
+  // even if the user drags outside the canvas and releases there.
+  useEffect(() => {
+    if (!dragging) return;
+    const up = () => setDragging(false);
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  }, [dragging]);
+
   return (
     <canvas
       ref={canvasRef}
       width={(GRID_W * SCALE) + 50}
       height={GRID_H * SCALE}
       onClick={onClick}
-      onMouseDown={onMouseDown}
+      onMouseDown={(e) => {
+        setDragging(true);
+        onMouseDown?.(e);
+      }}
       style={{
-        cursor: 'pointer',
+        cursor: dragging ? 'grabbing' : 'grab',
         imageRendering: 'pixelated',
         filter: 'drop-shadow(0 6px 14px rgba(204,120,92,0.4))',
         display: 'block',

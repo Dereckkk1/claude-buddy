@@ -20,6 +20,7 @@ export const EN = {
     friday: ['Friday! What’s up?', 'Last one of the day.', 'Friyay — bring it.'],
     weekend: ['Weekend grind? Respect.', 'Saturday/Sunday — how can I help?', 'Weekend, I’m here.'],
     generic: ['How can I help?', 'Go ahead.', 'I’m listening.', 'What’s the idea?', 'What can I do?'],
+    recentReturn: ['back already?', 'oh, hi again!', 'wait, you again?', 'that was fast!', 'missed me?'],
   },
 
   // Input panel
@@ -144,6 +145,12 @@ export const EN = {
     settings: 'Settings…',
     configKey: 'Configure API key',
     quit: 'Quit',
+    tooltip: {
+      sleeping: 'Claude Buddy — sleeping (Ctrl+Shift+Space to wake)',
+      idle: 'Claude Buddy — active',
+      thinking: 'Claude Buddy — thinking…',
+      error: 'Claude Buddy — error (click to view)',
+    },
   },
 
   // TTS voice picker labels
@@ -324,6 +331,34 @@ export const EN = {
     closing: 'The ONLY acceptable response to "which one should I pick?" without an attachment is: call read_selection, see what’s there, and ANSWER based on that.\n\nMarkdown OK in chat (comments, explanations). Text edits ALWAYS via edit_in_place.',
     memoriesLabel: '\n\nMEMORIES about the user (use when relevant):',
   },
+
+  // First-run onboarding (post-API-key welcome bubble + daily boot toast)
+  onboarding: {
+    firstRunGreeting: 'Hey! Press Ctrl+Shift+Space from anywhere to call me. Select some text first so I can read it.',
+    bootNotificationTitle: 'Claude Buddy',
+    bootNotificationBody: 'I’m running. Ctrl+Shift+Space to wake me up.',
+    dragHint: 'drag to move me',
+  },
+
+  // Tip-of-the-day shown above greeting during the first few wakes
+  tips: {
+    tip1: 'Tip: drag a folder onto me and I’ll read every file inside.',
+    tip2: 'Tip: Agent Mode lets me click and type for you.',
+    tip3: 'Tip: select text in any app, then ask me to “fix this”.',
+    tip4: 'Tip: 📸 capture a screen region from the Attach button.',
+    tip5: 'Tip: configure MCP servers in Settings → MCP.',
+  },
+
+  // Extra config-window strings (added after the original `config` block)
+  configExtras: {
+    noKeyLink: 'Don’t have a key yet?',
+    costNote: 'pay-as-you-go, roughly $0.003 per short question',
+  },
+
+  // Extra error UI strings
+  errorsExtras: {
+    openConfig: 'Open config',
+  },
 };
 
 export const PT: StringDict = {
@@ -336,6 +371,7 @@ export const PT: StringDict = {
     friday: ['Sextou! O que rola?', 'Última do dia, manda', 'Sextouuu, manda bala?'],
     weekend: ['Folga e tu tá trampando? F', 'Sábadão/domingão, no que ajudo?', 'Fim de semana, tô aqui'],
     generic: ['Como posso ajudar?', 'Pode mandar', 'Tô aqui, fala comigo', 'Qual a idéia?', 'No que ajudo agora?'],
+    recentReturn: ['voltou rápido!', 'ué, de novo?', 'oi de novo!', 'mal te despedi e já voltou', 'sentiu falta?'],
   },
 
   input: {
@@ -450,6 +486,12 @@ export const PT: StringDict = {
     settings: 'Configurações…',
     configKey: 'Configurar API key',
     quit: 'Sair',
+    tooltip: {
+      sleeping: 'Claude Buddy — dormindo (Ctrl+Shift+Space pra chamar)',
+      idle: 'Claude Buddy — ativo',
+      thinking: 'Claude Buddy — pensando…',
+      error: 'Claude Buddy — erro (clique pra ver)',
+    },
   },
 
   voice: {
@@ -625,6 +667,30 @@ export const PT: StringDict = {
     closing: 'A ÚNICA resposta aceitável pra "qual eu faço?" sem anexo é: chamar read_selection, ver o que tem, e RESPONDER baseado nisso.\n\nMarkdown OK pro chat (comentários, explicações). Edição de texto SEMPRE via edit_in_place.',
     memoriesLabel: '\n\nMEMÓRIAS sobre o usuário (use quando relevante):',
   },
+
+  onboarding: {
+    firstRunGreeting: 'Oi! Use Ctrl+Shift+Space de qualquer lugar pra me chamar. Selecione um texto antes pra eu poder lê-lo.',
+    bootNotificationTitle: 'Claude Buddy',
+    bootNotificationBody: 'Tô rodando. Ctrl+Shift+Space pra me chamar.',
+    dragHint: 'arraste pra mover',
+  },
+
+  tips: {
+    tip1: 'Sabia? Arraste uma pasta aqui pra eu ler todos os arquivos.',
+    tip2: 'Modo Agente clica e digita pra você.',
+    tip3: 'Selecione um texto em qualquer app, depois me peça "fix this".',
+    tip4: '📸 Tire prints de uma região da tela pelo botão Anexar.',
+    tip5: 'Configure MCP servers em Settings → MCP.',
+  },
+
+  configExtras: {
+    noKeyLink: 'Ainda não tem uma key?',
+    costNote: 'pay-as-you-go, ~$0.003 por pergunta curta',
+  },
+
+  errorsExtras: {
+    openConfig: 'Abrir config',
+  },
 };
 
 export const ES: StringDict = {
@@ -637,6 +703,7 @@ export const ES: StringDict = {
     friday: ['¡Viernes! ¿Qué hay?', 'La última del día, dale', '¡Viernes! Manda'],
     weekend: ['¿Trabajando en finde? Respect.', 'Sábado/domingo — ¿en qué ayudo?', 'Finde, aquí estoy'],
     generic: ['¿En qué te ayudo?', 'Dale, manda', 'Aquí estoy, habla', '¿Cuál es la idea?', '¿Qué hacemos?'],
+    recentReturn: ['¿volviste rápido?', 'ah, ¿otra vez?', '¡hola de nuevo!', '¡qué rápido!', '¿me extrañaste?'],
   },
 
   input: {
@@ -751,6 +818,12 @@ export const ES: StringDict = {
     settings: 'Ajustes…',
     configKey: 'Configurar API key',
     quit: 'Salir',
+    tooltip: {
+      sleeping: 'Claude Buddy — durmiendo (Ctrl+Shift+Space para llamarme)',
+      idle: 'Claude Buddy — activo',
+      thinking: 'Claude Buddy — pensando…',
+      error: 'Claude Buddy — error (clic para ver)',
+    },
   },
 
   voice: {
@@ -925,6 +998,30 @@ export const ES: StringDict = {
     antiBody: '- ❌ "No enviaste nada. ¿Cuál es la situación?" → MAL. Llama a read_selection PRIMERO.\n- ❌ "Para corregir necesito que pegues el texto aquí." → MAL. Llama a read_selection.\n- ❌ "¿Qué texto quieres?" → MAL. Llama a read_selection.\n- ❌ "Dime de verdad, ¿cuál es el contexto?" → MAL. Llama a read_selection.\n- ❌ Devolver texto editado en code block en el chat. → MAL. Usa edit_in_place.',
     closing: 'La ÚNICA respuesta aceptable a "¿cuál escojo?" sin adjunto es: llamar a read_selection, ver lo que hay, y RESPONDER basado en eso.\n\nMarkdown OK para el chat (comentarios, explicaciones). Edición de texto SIEMPRE via edit_in_place.',
     memoriesLabel: '\n\nMEMORIAS sobre el usuario (usa cuando sea relevante):',
+  },
+
+  onboarding: {
+    firstRunGreeting: '¡Hola! Usa Ctrl+Shift+Space desde cualquier lugar para llamarme. Selecciona texto antes para que pueda leerlo.',
+    bootNotificationTitle: 'Claude Buddy',
+    bootNotificationBody: 'Estoy corriendo. Ctrl+Shift+Space para despertarme.',
+    dragHint: 'arrástrame para moverme',
+  },
+
+  tips: {
+    tip1: 'Tip: arrastra una carpeta y leo todos los archivos.',
+    tip2: 'Tip: el Modo Agente clica y escribe por ti.',
+    tip3: 'Tip: selecciona texto en cualquier app y pídeme "fix this".',
+    tip4: 'Tip: 📸 captura una región de pantalla desde el botón Adjuntar.',
+    tip5: 'Tip: configura MCP servers en Ajustes → MCP.',
+  },
+
+  configExtras: {
+    noKeyLink: '¿Aún no tienes una key?',
+    costNote: 'pay-as-you-go, ~$0.003 por pregunta corta',
+  },
+
+  errorsExtras: {
+    openConfig: 'Abrir config',
   },
 };
 

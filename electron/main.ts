@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, screen, dialog } from 'electron';
+import { app, BrowserWindow, session, screen, dialog, Notification, shell } from 'electron';
 import path from 'node:path';
 import { stat as fsStat } from 'node:fs/promises';
 import { basename, resolve as resolvePath } from 'node:path';
@@ -11,6 +11,9 @@ import {
   getApiKey, setApiKey, getPosition, setPosition,
   listMemories, addMemory, deleteMemory, clearMemories,
   getSettings, updateSettings,
+  isFirstBoot, hasSeenIntro, markIntroSeen, getWakeCount, bumpWakeCount,
+  getLastBootNotificationDate, setLastBootNotificationDate,
+  type Locale,
 } from './store';
 import {
   initAgentsIfNeeded, listAgents, getActiveAgent, setActiveAgent,
@@ -27,8 +30,9 @@ import {
 import { pickAndParseFile } from './file-parser';
 import { synthesize, getVoices, defaultVoiceFor, languageOfVoice } from './edge-tts';
 import { registerHotkeys, unregisterHotkeys } from './hotkeys';
-import { createTray, destroyTray, refreshTrayMenu } from './tray';
+import { createTray, destroyTray, refreshTrayMenu, setTrayState } from './tray';
 import { setupAutoUpdater } from './updater';
+import { translate } from '../shared/i18n-strings';
 
 let mascotWin: BrowserWindow | null = null;
 let configWin: BrowserWindow | null = null;
@@ -58,6 +62,15 @@ function createConfigWindow(): BrowserWindow {
     win.loadFile('dist/config-window/index.html');
   }
   configWin = win;
+  // If the user closes the config X without ever providing a key AND no
+  // mascot exists yet, the app would linger as a tray-less zombie process.
+  // Quit cleanly in that case so it doesn't sit invisible in Task Manager.
+  win.on('close', () => {
+    if (!getApiKey() && !mascotWin) {
+      // Defer so the close event finishes propagating before we tear down.
+      setImmediate(() => app.quit());
+    }
+  });
   win.on('closed', () => { configWin = null; });
   return win;
 }
@@ -125,7 +138,44 @@ function startMascot() {
   setInterval(() => { captureActiveWindow(); }, 1500);
 }
 
+// Map the OS locale (BCP-47 like "pt-BR", "es-MX") to one of our supported
+// locales. Anything we don't speak falls back to English.
+function detectOsLocale(): Locale {
+  const raw = app.getLocale().toLowerCase();
+  if (raw.startsWith('pt')) return 'pt';
+  if (raw.startsWith('es')) return 'es';
+  return 'en';
+}
+
+// Fire a Windows native toast once per calendar day when the app boots
+// hidden via --hidden (autostart). Without this, users forget the app is
+// even running and never discover the hotkey.
+function maybeShowDailyBootNotification(): void {
+  if (!startHidden) return;
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  if (getLastBootNotificationDate() === today) return;
+  setLastBootNotificationDate(today);
+  try {
+    const locale = getSettings().locale;
+    new Notification({
+      title: translate(locale, 'onboarding.bootNotificationTitle'),
+      body: translate(locale, 'onboarding.bootNotificationBody'),
+    }).show();
+  } catch (e) {
+    console.warn('[main] boot notification failed:', e);
+  }
+}
+
 function bootstrap() {
+  // First-run locale detection: seed settings.locale from the OS so PT/ES
+  // users don't get an English-only experience on day one. We persist a
+  // minimal settings object so subsequent boots take the normal path.
+  if (isFirstBoot()) {
+    const detected = detectOsLocale();
+    updateSettings({ locale: detected });
+    console.log('[main] first-boot locale detected:', detected);
+  }
+
   // Migrate legacy memories into the Buddy agent on first run
   initAgentsIfNeeded(listMemories());
 
@@ -149,12 +199,30 @@ function bootstrap() {
     args: ['--hidden'],
   });
 
+  maybeShowDailyBootNotification();
+
   registerHandlers({
     'config:get-api-key': () => getApiKey(),
     'config:set-api-key': (key) => {
       setApiKey(key);
       if (!mascotWin) startMascot();
     },
+    'onboarding:first-run-done': () => {
+      // Fired by the config window right after the user saves their first API
+      // key. Boot the mascot (if not already up) and close config — the renderer
+      // picks up `hasSeenIntro=false` and shows the welcome bubble.
+      if (!mascotWin) startMascot();
+      configWin?.close();
+    },
+    'onboarding:get-flags': () => ({
+      hasSeenIntro: hasSeenIntro(),
+      wakeCount: getWakeCount(),
+    }),
+    'onboarding:mark-intro-seen': () => markIntroSeen(),
+    'onboarding:bump-wake-count': () => bumpWakeCount(),
+    'tray:set-state': (state) => setTrayState(state),
+    'config:open': () => { createConfigWindow(); },
+    'shell:open-external': (url) => { void shell.openExternal(url); },
     'position:get': () => getPosition(),
     'position:set': (pos) => setPosition(pos),
     'window:show': () => { mascotWin?.show(); },
