@@ -222,6 +222,7 @@ export interface IpcRequests {
         command: string;
         cwd?: string;
         timeoutMs?: number;
+        runId?: string;
     }) => {
         ok: true;
         result: import('../electron/shell').RunResult;
@@ -229,6 +230,27 @@ export interface IpcRequests {
         ok: false;
         error: string;
     };
+    'shell:kill-command': (id: string) => {
+        ok: boolean;
+    };
+    'shell:extend-timeout': (params: {
+        id: string;
+        deltaMs: number;
+    }) => {
+        ok: boolean;
+    };
+    'shell:allowlist-add': (pattern: string) => string[];
+    'shell:allowlist-list': () => string[];
+    'shell:allowlist-match': (command: string) => boolean;
+    'clipboard:read-text-for-undo': () => string | null;
+    'automation:register-undo-paste': (params: {
+        token: string;
+        original: string;
+    }) => void;
+    'automation:undo-paste': (token: string) => {
+        ok: boolean;
+    };
+    'agent:panic-abort': () => void;
     'mcp:list-configs': () => import('./mcp-types').MCPServerConfig[];
     'mcp:add-config': (input: Omit<import('./mcp-types').MCPServerConfig, 'id' | 'prefix'>) => import('./mcp-types').MCPServerConfig;
     'mcp:update-config': (params: {

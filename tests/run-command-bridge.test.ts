@@ -25,26 +25,40 @@ describe('run-command-bridge — approvals', () => {
     expect(pending[0].command).toBe('echo hi');
   });
 
-  it('resolveApproval resolves the decision promise and removes the entry', async () => {
+  it('resolveApproval resolves the decision promise but keeps the entry mounted', async () => {
+    // Entries stay in `pending` after resolution so the card can transition
+    // from pending → running → result without being unmounted. Removal
+    // happens en-masse via clearAllApprovals when the bubble closes.
     const { id, decision } = requestApproval({ command: 'echo hi' });
     resolveApproval(id, { approved: true, finalCommand: 'echo edited' });
     const d = await decision;
     expect(d.approved).toBe(true);
     expect(d.finalCommand).toBe('echo edited');
-    expect(getPendingApprovals().length).toBe(0);
+    expect(getPendingApprovals().length).toBe(1);
+  });
+
+  it('resolveApproval called twice on the same id only fires once', async () => {
+    const { id, decision } = requestApproval({ command: 'echo hi' });
+    resolveApproval(id, { approved: true });
+    // Second call must NOT re-resolve (would replace the value the consumer
+    // already awaited and could double-fire cancelled events).
+    resolveApproval(id, { approved: false });
+    const d = await decision;
+    expect(d.approved).toBe(true);
   });
 
   it('resolveApproval on an unknown id is a no-op', () => {
     expect(() => resolveApproval('bogus-id', { approved: true })).not.toThrow();
   });
 
-  it('subscribePendingApprovals fires on add and on resolve', () => {
+  it('subscribePendingApprovals fires on add (resolve does NOT mutate the list)', () => {
     let count = 0;
     const unsub = subscribePendingApprovals(() => { count++; });
     const { id } = requestApproval({ command: 'a' });
     expect(count).toBe(1);
+    // resolve no longer removes the entry → no notification
     resolveApproval(id, { approved: false });
-    expect(count).toBe(2);
+    expect(count).toBe(1);
     unsub();
   });
 

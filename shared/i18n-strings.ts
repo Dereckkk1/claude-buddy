@@ -94,7 +94,9 @@ export const EN = {
   steps: {
     read_selection: 'read your selection',
     edit_in_place: 'edited in your window',
+    edit_in_place_undoable: 'edited in your window',
     save_memory: 'saved to memory',
+    save_memory_undo: 'remembered: "{fact}"',
     web_search: '🔍 searching the web',
     screenshot: 'took a screenshot',
     attached_image: 'read the image',
@@ -102,6 +104,7 @@ export const EN = {
     list_folder: 'listed folder',
     read_file: 'read file',
     run_command: 'ran command',
+    detailsToggle: 'details',
   },
 
   // Shell command approval card
@@ -112,13 +115,33 @@ export const EN = {
     cancel: 'Cancel',
     edit: 'Edit',
     run: 'Run',
+    runDestructive: 'RUN (destructive!)',
+    destructiveWarning: 'This command may destroy data — review before running',
+    alwaysAllow: 'Always allow commands like',
     running: 'running…',
     ran: 'ran',
+    runningFor: 'running for {elapsed}',
+    timeoutAt: 'timeout {timeout}',
+    extendTimeout: '+1 minute',
+    killProcess: 'Kill process',
+    killedByUser: 'killed by user',
     exitCode: 'exit',
     timedOut: 'timed out',
     showOutput: 'show output',
     hideOutput: 'hide output',
     noOutput: '(no output)',
+    undoPaste: 'undo paste',
+    undonePaste: 'undone',
+    undoMemory: 'undo',
+    undoneMemory: 'forgotten',
+  },
+
+  // MCP banner (shown in bubble header when a server crashes)
+  mcp: {
+    banner: {
+      crashed: '⚠ MCP: {n} server(s) failed',
+      tooltip: 'Open settings to inspect MCP servers',
+    },
   },
 
   // Status / inline UI
@@ -138,6 +161,14 @@ export const EN = {
     error: 'error',
     stopped: 'stopped',
     stop: 'stop',
+    stepCounter: 'step {count}/{max}',
+    preflightTitle: 'Agent mode',
+    preflightConfirm: 'The agent will drive your mouse/keyboard to: "{goal}". Confirm?',
+    preflightYes: 'Yes, go',
+    preflightNo: 'Cancel',
+    panicAborted: 'panic key — aborted',
+    redirectPlaceholder: 'redirect: type a new goal',
+    redirect: 'redirect',
   },
 
   // Agent switcher (UI on the speech bubble)
@@ -462,7 +493,9 @@ export const PT: StringDict = {
   steps: {
     read_selection: 'leu o que você selecionou',
     edit_in_place: 'editou na sua janela',
+    edit_in_place_undoable: 'editou na sua janela',
     save_memory: 'salvou na memória',
+    save_memory_undo: 'lembrei: "{fact}"',
     web_search: '🔍 buscando na web',
     screenshot: 'tirou print da tela',
     attached_image: 'leu a imagem',
@@ -470,6 +503,7 @@ export const PT: StringDict = {
     list_folder: 'listou a pasta',
     read_file: 'leu o arquivo',
     run_command: 'rodou comando',
+    detailsToggle: 'detalhes',
   },
 
   shell: {
@@ -479,13 +513,32 @@ export const PT: StringDict = {
     cancel: 'Cancelar',
     edit: 'Editar',
     run: 'Rodar',
+    runDestructive: 'RODAR (destrutivo!)',
+    destructiveWarning: 'Este comando pode destruir dados — revise antes de rodar',
+    alwaysAllow: 'Sempre permitir comandos como',
     running: 'rodando…',
     ran: 'rodou',
+    runningFor: 'rodando há {elapsed}',
+    timeoutAt: 'timeout {timeout}',
+    extendTimeout: '+1 minuto',
+    killProcess: 'Matar processo',
+    killedByUser: 'morto pelo usuário',
     exitCode: 'exit',
     timedOut: 'travou no timeout',
     showOutput: 'ver output',
     hideOutput: 'esconder output',
     noOutput: '(sem output)',
+    undoPaste: 'desfazer cola',
+    undonePaste: 'desfeito',
+    undoMemory: 'esquecer',
+    undoneMemory: 'esquecido',
+  },
+
+  mcp: {
+    banner: {
+      crashed: '⚠ MCP: {n} servidor(es) com falha',
+      tooltip: 'Abrir configurações pra ver os servers MCP',
+    },
   },
 
   bubble: {
@@ -503,6 +556,14 @@ export const PT: StringDict = {
     error: 'erro',
     stopped: 'parado',
     stop: 'parar',
+    stepCounter: 'passo {count}/{max}',
+    preflightTitle: 'Modo agente',
+    preflightConfirm: 'O agente vai pilotar seu mouse/teclado pra: "{goal}". Confirmar?',
+    preflightYes: 'Sim, vai',
+    preflightNo: 'Cancelar',
+    panicAborted: 'tecla de pânico — abortado',
+    redirectPlaceholder: 'redirecionar: digita um novo objetivo',
+    redirect: 'redirecionar',
   },
 
   agents: {
@@ -818,7 +879,9 @@ export const ES: StringDict = {
   steps: {
     read_selection: 'leyó tu selección',
     edit_in_place: 'editó en tu ventana',
+    edit_in_place_undoable: 'editó en tu ventana',
     save_memory: 'guardó en la memoria',
+    save_memory_undo: 'recordé: "{fact}"',
     web_search: '🔍 buscando en la web',
     screenshot: 'sacó una captura',
     attached_image: 'leyó la imagen',
@@ -826,6 +889,7 @@ export const ES: StringDict = {
     list_folder: 'listó la carpeta',
     read_file: 'leyó el archivo',
     run_command: 'ejecutó comando',
+    detailsToggle: 'detalles',
   },
 
   shell: {
@@ -835,13 +899,32 @@ export const ES: StringDict = {
     cancel: 'Cancelar',
     edit: 'Editar',
     run: 'Ejecutar',
+    runDestructive: 'EJECUTAR (¡destructivo!)',
+    destructiveWarning: 'Este comando puede destruir datos — revisa antes de ejecutar',
+    alwaysAllow: 'Permitir siempre comandos como',
     running: 'ejecutando…',
     ran: 'ejecutó',
+    runningFor: 'ejecutando hace {elapsed}',
+    timeoutAt: 'timeout {timeout}',
+    extendTimeout: '+1 minuto',
+    killProcess: 'Matar proceso',
+    killedByUser: 'matado por el usuario',
     exitCode: 'exit',
     timedOut: 'timeout alcanzado',
     showOutput: 'ver output',
     hideOutput: 'ocultar output',
     noOutput: '(sin output)',
+    undoPaste: 'deshacer pegado',
+    undonePaste: 'deshecho',
+    undoMemory: 'olvidar',
+    undoneMemory: 'olvidado',
+  },
+
+  mcp: {
+    banner: {
+      crashed: '⚠ MCP: {n} servidor(es) con fallo',
+      tooltip: 'Abrir ajustes para ver los servidores MCP',
+    },
   },
 
   bubble: {
@@ -859,6 +942,14 @@ export const ES: StringDict = {
     error: 'error',
     stopped: 'parado',
     stop: 'parar',
+    stepCounter: 'paso {count}/{max}',
+    preflightTitle: 'Modo agente',
+    preflightConfirm: 'El agente manejará tu mouse/teclado para: "{goal}". ¿Confirmar?',
+    preflightYes: 'Sí, dale',
+    preflightNo: 'Cancelar',
+    panicAborted: 'tecla de pánico — abortado',
+    redirectPlaceholder: 'redirigir: escribe un nuevo objetivo',
+    redirect: 'redirigir',
   },
 
   agents: {

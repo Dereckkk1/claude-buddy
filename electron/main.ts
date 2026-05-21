@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, screen, dialog } from 'electron';
+import { app, BrowserWindow, clipboard, session, screen, dialog } from 'electron';
 import path from 'node:path';
 import { stat as fsStat, readFile as fsReadFile, writeFile as fsWriteFile } from 'node:fs/promises';
 import { basename, resolve as resolvePath } from 'node:path';
@@ -7,7 +7,7 @@ import {
   listFolder, readFile as readFileFs, pathIsWithin,
   countFolderEntries, readImageAsAttachment, isSensitiveFolder,
 } from './files';
-import { runPowerShell } from './shell';
+import { runPowerShell, killCommand, extendTimeout } from './shell';
 import * as mcp from './mcp';
 import { createMascotWindow } from './window-manager';
 import { registerHandlers } from './ipc';
@@ -15,6 +15,7 @@ import {
   getApiKey, setApiKey, getPosition, setPosition,
   listMemories, addMemory, deleteMemory, clearMemories,
   getSettings, updateSettings,
+  addRunCommandPattern, listRunCommandAllowlist, matchesRunCommandAllowlist,
 } from './store';
 import {
   initAgentsIfNeeded, listAgents, getActiveAgent, setActiveAgent,
@@ -41,6 +42,19 @@ let settingsWin: BrowserWindow | null = null;
 let attachedScope: string[] = []; // absolute paths the user has explicitly attached
 const isDev = !app.isPackaged;
 const startHidden = process.argv.includes('--hidden');
+
+// Registry of clipboard snapshots taken before edit_in_place paste, so the
+// renderer can request an undo (re-paste of the previous content) after the
+// fact. Keyed by a token surfaced into the response stream.
+const undoPasteRegistry = new Map<string, string>();
+export function rememberUndoPasteSnapshot(token: string, original: string): void {
+  undoPasteRegistry.set(token, original);
+  // Cap to avoid leaking memory across long sessions.
+  if (undoPasteRegistry.size > 50) {
+    const firstKey = undoPasteRegistry.keys().next().value;
+    if (firstKey) undoPasteRegistry.delete(firstKey);
+  }
+}
 
 function createConfigWindow(): BrowserWindow {
   if (configWin) { configWin.focus(); return configWin; }
@@ -273,14 +287,47 @@ function bootstrap() {
     'mcp:call-tool':      async ({ prefixedName, input }) => mcp.callTool(prefixedName, input),
     'mcp:test':           async (config) => mcp.testConfig(config),
     'mcp:get-stderr':     (id) => mcp.getServerErrorInfo(id),
-    'shell:run-command': async ({ command, cwd, timeoutMs }) => {
+    'shell:run-command': async ({ command, cwd, timeoutMs, runId }) => {
       try {
-        const result = await runPowerShell(command, cwd, timeoutMs);
+        const result = await runPowerShell(command, cwd, timeoutMs, runId);
         return { ok: true, result };
       } catch (e) {
         console.error('[shell] run failed:', e);
         return { ok: false, error: e instanceof Error ? e.message : 'spawn failed' };
       }
+    },
+    'shell:kill-command': (id) => ({ ok: killCommand(id) }),
+    'shell:extend-timeout': ({ id, deltaMs }) => ({ ok: extendTimeout(id, deltaMs) }),
+    'shell:allowlist-list': () => listRunCommandAllowlist(),
+    'shell:allowlist-add': (pattern) => addRunCommandPattern(pattern),
+    'shell:allowlist-match': (command) => matchesRunCommandAllowlist(command),
+    'clipboard:read-text-for-undo': () => {
+      try {
+        const t = clipboard.readText();
+        // Only treat real text as recoverable; ignore empty clipboards / images.
+        return t && t.length > 0 ? t : null;
+      } catch {
+        return null;
+      }
+    },
+    'automation:register-undo-paste': ({ token, original }) => {
+      rememberUndoPasteSnapshot(token, original);
+    },
+    'automation:undo-paste': async (token) => {
+      const original = undoPasteRegistry.get(token);
+      if (original == null) return { ok: false };
+      undoPasteRegistry.delete(token);
+      mascotWin?.blur();
+      try {
+        await pasteToActiveWindow(original);
+        return { ok: true };
+      } catch (e) {
+        console.error('[main] undo-paste failed:', e);
+        return { ok: false };
+      }
+    },
+    'agent:panic-abort': () => {
+      mascotWin?.webContents.send('agent:panic');
     },
     'files:resolve-dropped': async (paths) => {
       const out = [] as Array<{

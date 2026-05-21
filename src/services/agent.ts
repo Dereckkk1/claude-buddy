@@ -7,16 +7,20 @@ const COMPUTER_BETA = 'computer-use-2025-11-24';
 const COMPUTER_TOOL_TYPE = 'computer_20251124';
 
 export type AgentEvent =
-  | { type: 'status'; message: string }
+  | { type: 'status'; message: string; stepCount?: number; maxSteps?: number }
   | { type: 'action'; message: string }
   | { type: 'thought'; message: string }
   | { type: 'done'; message: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'lost'; message: string }
+  | { type: 'confirm-start'; goal: string };
 
 export interface AgentOptions {
   goal: string;
   onEvent: (e: AgentEvent) => void;
   signal: AbortSignal;
+  /** Resolves to true if user OKs piloting the cursor/keyboard. */
+  requestPreflightConfirm?: (goal: string) => Promise<boolean>;
 }
 
 const SYSTEM_PROMPT = `Você é o Claude Buddy controlando o computador Windows do usuário pra cumprir um objetivo.
@@ -33,7 +37,7 @@ REGRAS:
 - Comunique em português brasileiro informal.`;
 
 export async function runAgent(opts: AgentOptions): Promise<void> {
-  const { goal, onEvent, signal } = opts;
+  const { goal, onEvent, signal, requestPreflightConfirm } = opts;
 
   const apiKey = await invoke('config:get-api-key');
   if (!apiKey) throw new Error('API_KEY_MISSING');
@@ -53,13 +57,25 @@ export async function runAgent(opts: AgentOptions): Promise<void> {
     content: goal,
   }];
 
+  let preflightConfirmed = !requestPreflightConfirm; // skip confirm if caller doesn't wire one
+
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
     if (signal.aborted) {
       onEvent({ type: 'error', message: 'parado pelo usuário' });
       return;
     }
 
-    onEvent({ type: 'status', message: `pensando (passo ${iter + 1})` });
+    onEvent({
+      type: 'status',
+      message: `pensando (passo ${iter + 1})`,
+      stepCount: iter + 1,
+      maxSteps: MAX_ITERATIONS,
+    });
+
+    // Soft "lost" cue near the cap so the user can redirect before MAX is hit.
+    if (iter + 1 === Math.floor(MAX_ITERATIONS * 0.83)) {
+      onEvent({ type: 'lost', message: 'tô meio perdido, quer reformular?' });
+    }
 
     const response = await client.messages.create({
       model: MODEL,
@@ -102,6 +118,19 @@ export async function runAgent(opts: AgentOptions): Promise<void> {
       if (signal.aborted) {
         onEvent({ type: 'error', message: 'parado pelo usuário' });
         return;
+      }
+
+      // First action of the run: ask the user one last time before we start
+      // taking over the cursor/keyboard. The default-focus button is Cancel
+      // (handled by the renderer modal).
+      if (!preflightConfirmed && requestPreflightConfirm) {
+        onEvent({ type: 'confirm-start', goal });
+        const ok = await requestPreflightConfirm(goal);
+        if (!ok) {
+          onEvent({ type: 'error', message: 'parado pelo usuário' });
+          return;
+        }
+        preflightConfirmed = true;
       }
 
       const input = block.input as Record<string, unknown>;
