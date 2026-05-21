@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Message, Attachment, AttachedPath } from '@/state/conversation';
-import type { AgentDTO, Locale } from '@shared/ipc-types';
+import type { AgentDTO, Locale, ActiveAppInfo } from '@shared/ipc-types';
 import { translate } from '@shared/i18n-strings';
 import { invoke } from './ipc';
 import { getLocale } from '@/i18n';
@@ -29,6 +29,16 @@ export function pickModel(messages: Message[], attachments: Attachment[]): strin
   if (heavy.test(lastUser)) return SONNET;
   if (lastUser.length > 500) return SONNET;
   return HAIKU;
+}
+
+// Heuristic that decides whether to ask the API for extended thinking. We only
+// flip it on for the Sonnet path (Haiku doesn't benefit much and the budget
+// cost isn't worth it for short turns).
+function shouldUseExtendedThinking(messages: Message[]): boolean {
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  if (lastUser.length > 500) return true;
+  const deepCues = /(explique\s+detalhadamente|passo\s*a\s*passo|step.?by.?step|explain\s+in\s+detail|deep\s+dive|explica\s+detalhadamente|en\s+detalle|paso\s*a\s*paso)/i;
+  return deepCues.test(lastUser);
 }
 
 type ContentBlock =
@@ -79,17 +89,39 @@ function mcpHintBlock(toolCount: number, serverNames: string[]): string {
   return `\n\nMCP TOOLS DISPONÍVEIS: ${toolCount} tools de servers conectados (${serverNames.join(', ')}).\n\nElas aparecem na lista de tools com prefixo <server>_<tool>. USE PROATIVAMENTE quando relevante — NUNCA diga "não tenho acesso a X" sem tentar a tool primeiro. Se o user pergunta algo que parece bater com uma tool MCP, tenta chamá-la. Pra GitHub MCP especificamente: você pode descobrir o username do user via get_me (ou similar) — não pergunte antes de tentar.`;
 }
 
+function userNameBlock(userName: string): string {
+  if (!userName.trim()) return '';
+  return `\n\nUSER NAME: ${userName.trim()} — refer to them as such when appropriate (don't overdo it, sounds robotic).`;
+}
+
+function activeAppBlock(info: ActiveAppInfo | null): string {
+  if (!info) return '';
+  const proc = info.processName?.trim();
+  const title = info.windowTitle?.trim();
+  if (!proc && !title) return '';
+  // Truncate huge titles so the prompt stays small. 200 chars is enough.
+  const safeTitle = title.length > 200 ? `${title.slice(0, 200)}…` : title;
+  return `\n\nACTIVE APP CONTEXT: user is currently in ${proc || 'unknown app'}${safeTitle ? ` — window title: "${safeTitle}"` : ''}. Take this into account when the question is vague.`;
+}
+
 function languageDirective(locale: Locale, respondInUserLanguage: boolean): string {
-  // When the user opts out, fall back to the strict locale prompt that pins
-  // the response language to the UI locale; otherwise use the "match the
-  // user's last message" variant (the new default).
+  // When the user opts out, pin the response language to the UI locale;
+  // otherwise use the "match the user's last message" variant (default).
   const key = respondInUserLanguage
     ? 'systemPrompt.respondInLanguage'
     : 'systemPrompt.respondInLocale';
   return translate(locale, key, { locale });
 }
 
-function modelForAgent(agent: AgentDTO, messages: Message[], attachments: Attachment[]): string {
+function modelForAgent(
+  agent: AgentDTO,
+  messages: Message[],
+  attachments: Attachment[],
+  forcedModel?: 'haiku' | 'sonnet' | null,
+): string {
+  // Per-turn override (slash command /model) wins over everything else.
+  if (forcedModel === 'haiku') return HAIKU;
+  if (forcedModel === 'sonnet') return SONNET;
   if (agent.model === 'haiku') return HAIKU;
   if (agent.model === 'sonnet') return SONNET;
   return pickModel(messages, attachments);
@@ -106,6 +138,14 @@ export interface StreamCallbacks {
   onUsage?: (usage: { inputTokens: number; outputTokens: number; model: string }) => void;
   /** Optional abort signal — passed through to the SDK's `messages.stream`. */
   signal?: AbortSignal;
+  /** Fires once when extended thinking is activated for this turn. */
+  onExtendedThinking?: () => void;
+}
+
+export interface ChatOptions {
+  forcedModel?: 'haiku' | 'sonnet' | null;
+  userName?: string;
+  awarenessEnabled?: boolean;
 }
 
 function attachmentsToBlocks(attachments: Attachment[]): ContentBlock[] {
@@ -161,11 +201,18 @@ export async function chatWithSkills(
   agent: AgentDTO,
   callbacks: StreamCallbacks,
   attachedPaths: AttachedPath[] = [],
-  signal?: AbortSignal,
+  options: ChatOptions = {},
 ): Promise<void> {
   const client = await getClient();
-  const model = modelForAgent(agent, messages, attachments);
+  const model = modelForAgent(agent, messages, attachments, options.forcedModel);
   callbacks.onModelPicked?.(model);
+
+  // Optional foreground app awareness. We fetch lazily so non-awareness paths
+  // don't pay the IPC cost; main process caches the value cheaply.
+  let activeApp: ActiveAppInfo | null = null;
+  if (options.awarenessEnabled) {
+    try { activeApp = await invoke('keyboard:get-active-app'); } catch { /* swallow */ }
+  }
 
   const apiMessages: Anthropic.MessageParam[] = buildInitialMessages(messages, attachments);
   const locale = getLocale();
@@ -183,8 +230,10 @@ export async function chatWithSkills(
     languageDirective(locale, respondInUserLanguage),
     '---',
     agent.systemPrompt,
+    userNameBlock(options.userName ?? ''),
     memoriesBlock(agent.memories, locale),
     attachedPathsBlock(attachedPaths),
+    activeAppBlock(activeApp),
     mcpHintBlock(mcpTools.length, mcpServerNames),
   ].join('\n\n');
 
@@ -195,6 +244,11 @@ export async function chatWithSkills(
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
+  // Only Sonnet really benefits from extended thinking — Haiku doesn't expose
+  // it the same way and the extra budget would be wasted.
+  const useThinking = model === SONNET && shouldUseExtendedThinking(messages);
+  if (useThinking) callbacks.onExtendedThinking?.();
+
   for (let iter = 0; iter < 6; iter++) {
     // Abort fast path: if caller cancelled between iterations, surface as
     // AbortError so the App-level handler can suppress error UI.
@@ -203,7 +257,6 @@ export async function chatWithSkills(
       err.name = 'AbortError';
       throw err;
     }
-    if (signal?.aborted) return;
     try {
       // Merge native tools + web_search (server-side) + any MCP tools that
       // are currently advertised by running servers. Reusing mcpTools from
@@ -213,13 +266,22 @@ export async function chatWithSkills(
         description: t.description,
         input_schema: t.inputSchema,
       }));
-      const stream = await client.messages.stream({
+      // Extended thinking requires max_tokens > budget_tokens; bump it on the
+      // thinking path so the model actually has room to think AND respond.
+      const streamParams: Record<string, unknown> = {
         model,
-        max_tokens: 1024,
+        max_tokens: useThinking ? 8000 : 1024,
         system,
-        tools: [...TOOLS, WEB_SEARCH_TOOL, ...mcpToolDefs] as never,
-        messages: apiMessages as never,
-      }, callbacks.signal ? { signal: callbacks.signal } : undefined);
+        tools: [...TOOLS, WEB_SEARCH_TOOL, ...mcpToolDefs],
+        messages: apiMessages,
+      };
+      if (useThinking) {
+        streamParams.thinking = { type: 'enabled', budget_tokens: 4000 };
+      }
+      const stream = await client.messages.stream(
+        streamParams as never,
+        callbacks.signal ? { signal: callbacks.signal } : undefined,
+      );
 
       let textOut = '';
       const toolUses: { id: string; name: string; input: Record<string, unknown> }[] = [];
@@ -227,7 +289,7 @@ export async function chatWithSkills(
       let currentTool: { id: string; name: string } | null = null;
 
       for await (const event of stream) {
-        if (signal?.aborted) {
+        if (callbacks.signal?.aborted) {
           // Best effort — server may keep sending events briefly, but we ignore them.
           break;
         }
@@ -296,7 +358,7 @@ export async function chatWithSkills(
 
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const tu of toolUses) {
-        if (signal?.aborted) return;
+        if (callbacks.signal?.aborted) return;
         callbacks.onToolUse?.(tu.name, tu.input);
         try {
           const result = await executeTool(tu.name, tu.input);

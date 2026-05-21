@@ -371,6 +371,36 @@ export function SettingsApp() {
             </div>
             <div className="setting-row">
               <div>
+                <div className="setting-label">{t('settings.general.userName')}</div>
+                <div className="setting-help">{t('settings.general.userNameHelp')}</div>
+              </div>
+              <input
+                type="text"
+                value={settings.userName}
+                onChange={(e) => updateSetting({ userName: e.target.value })}
+                placeholder={t('settings.general.userNamePlaceholder')}
+                style={{
+                  padding: '6px 10px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  background: 'var(--bg-input)',
+                  color: 'var(--ink)',
+                  width: 200,
+                }}
+              />
+            </div>
+            <div className="setting-row">
+              <div>
+                <div className="setting-label">{t('settings.general.awareness')}</div>
+                <div className="setting-help">{t('settings.general.awarenessHelp')}</div>
+              </div>
+              <label className="switch">
+                <input type="checkbox" checked={settings.awarenessEnabled} onChange={(e) => updateSetting({ awarenessEnabled: e.target.checked })} />
+                <span></span>
+              </label>
+            </div>
+            <div className="setting-row">
+              <div>
                 <div className="setting-label">{t('settings.general.tts')}</div>
                 <div className="setting-help">{t('settings.general.ttsHelp')}</div>
               </div>

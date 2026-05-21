@@ -28,6 +28,10 @@ export interface AppSettings {
   // When true (default), agent responds in the language of the user's most
   // recent message. When false, always responds in the UI locale.
   respondInUserLanguage: boolean;
+  // Personalization — empty means "don't inject" (Buddy stays generic).
+  userName: string;
+  // When true, active foreground app (process + title) injected into prompt.
+  awarenessEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -42,6 +46,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundsVolume: 0.1,
   locale: 'en',
   respondInUserLanguage: true,
+  userName: '',
+  awarenessEnabled: true,
 };
 
 const encryptionKey = machineIdSync(true).slice(0, 32);

@@ -10,6 +10,10 @@ const descriptor: SpriteSheetDescriptor = {
     idle:     { frames: 2, fps: 1.7, loop: true, nextState: null },
     thinking: { frames: 4, fps: 6, loop: true, nextState: null },
     talking:  { frames: 3, fps: 8, loop: true, nextState: null },
+    // happy/confused são estados curtos (App.tsx volta pra idle via setTimeout
+    // depois de ~1s) então a duração total não importa muito — só loopam.
+    happy:    { frames: 2, fps: 6, loop: true, nextState: null },
+    confused: { frames: 4, fps: 5, loop: true, nextState: null },
   },
 };
 

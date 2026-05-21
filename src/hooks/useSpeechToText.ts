@@ -18,18 +18,24 @@ declare global {
   }
 }
 
-export function useSpeechToText(onTranscript: (text: string) => void) {
+/**
+ * Web Speech API wrapper. `lang` is a BCP-47 tag (e.g. 'pt-BR', 'en-US', 'es-ES').
+ *
+ * The hook recreates the underlying recognizer whenever `lang` changes so the
+ * language switch in settings is reflected immediately on the next toggle.
+ */
+export function useSpeechToText(onTranscript: (text: string) => void, lang: string = 'en-US') {
   const recogRef = useRef<SpeechRecognitionAPI | null>(null);
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
     const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    console.log('[STT] init — has SpeechRecognition?', !!Ctor);
+    console.log('[STT] init — has SpeechRecognition?', !!Ctor, 'lang:', lang);
     if (!Ctor) return;
     setSupported(true);
     const recog = new Ctor();
-    recog.lang = 'pt-BR';
+    recog.lang = lang;
     recog.continuous = false;
     recog.interimResults = false;
     recog.onresult = (e) => {
@@ -46,7 +52,7 @@ export function useSpeechToText(onTranscript: (text: string) => void) {
       setListening(false);
     };
     recogRef.current = recog;
-  }, [onTranscript]);
+  }, [onTranscript, lang]);
 
   const toggle = () => {
     const recog = recogRef.current;

@@ -76,13 +76,22 @@ export default function App() {
   const [wakeCount, setWakeCount] = useState(0);
   const [showDragHint, setShowDragHint] = useState(false);
   const lastSleepRef = useRef<number>(0);
+  // /model forces the model for the NEXT turn only. Cleared after the turn.
+  const [forcedModel, setForcedModel] = useState<'haiku' | 'sonnet' | null>(null);
+  // Extended thinking flag flips when the API stream opts in for deep think.
+  const [extendedThinking, setExtendedThinking] = useState(false);
+  // Markdown export button feedback (✓ shows for 1.5s after copy).
+  const [exportedRecently, setExportedRecently] = useState(false);
+  // Selection captured via Ctrl+Shift+A — handed to InputPanel as a one-shot seed.
+  const [inputPrefill, setInputPrefill] = useState<string | undefined>(undefined);
   const conv = useConversation();
   const drag = useDrag();
   const abortRef = useRef<AbortController | null>(null);
-  // Tracks the last time the user interacted with the bubble. Used by `wake()`
-  // to decide whether to preserve or reset the conversation — keeps context
-  // for quick re-engagements but starts fresh after a real break.
+  // Tracks last user interaction. Used by wake() to decide whether to preserve
+  // or reset the conversation — keeps context for quick re-engagements.
   const lastActiveRef = useRef<number>(Date.now());
+  // Timers for happy/confused transient sprite states.
+  const happyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useTheme(settings?.theme);
 
   useEffect(() => {
@@ -106,7 +115,7 @@ export default function App() {
       setSettings(next);
       // When the user changes language, refresh the greeting so the visible
       // line matches the new locale immediately (it's a snapshot at mount).
-      setGreeting(pickGreeting());
+      setGreeting(pickGreeting(new Date(), { userName: next.userName ?? '' }));
     };
     on('settings:changed', handler);
     return () => off('settings:changed');
@@ -193,10 +202,31 @@ export default function App() {
     return () => stopThinking();
   }, [conv.status, settings?.soundsEnabled]);
 
+  /**
+   * Schedule a transient sprite state (e.g. `happy`/`confused`) that auto-
+   * reverts to `idle` after `ms`. Replaces any previous transient timer so
+   * back-to-back triggers don't race each other. If the conversation is
+   * still streaming (status=talking) we revert to `talking`, not `idle`,
+   * so a mid-stream tool celebration doesn't leave the mascot frozen.
+   */
+  const flashState = (transient: SpriteState, ms: number) => {
+    if (happyTimerRef.current) clearTimeout(happyTimerRef.current);
+    setState(transient);
+    happyTimerRef.current = setTimeout(() => {
+      setState((cur) => {
+        if (cur !== transient) return cur; // someone moved us — leave alone
+        const status = useConversation.getState().status;
+        if (status === 'talking') return 'talking';
+        if (status === 'thinking') return 'thinking';
+        return 'idle';
+      });
+      happyTimerRef.current = null;
+    }, ms);
+  };
+
   const wake = async () => {
     if (state !== 'sleeping') return;
     // Wipe prior conversation only if sleep was longer than STALE threshold.
-    // Quick re-wakes preserve context — user just looked away for a sec.
     const wasStale = Date.now() - lastActiveRef.current > STALE_CONVERSATION_MS;
     if (wasStale) {
       conv.reset();
@@ -204,9 +234,12 @@ export default function App() {
       setCollapsedResponse(false);
     }
     lastActiveRef.current = Date.now();
-    // "Back so soon?" — if within 2 min, pull recentReturn pool instead.
+    // "Back so soon?" + user name interpolation in one go.
     const recentReturn = lastSleepRef.current > 0 && (Date.now() - lastSleepRef.current) < 120_000;
-    setGreeting(pickGreeting(new Date(), { recentReturn }));
+    setGreeting(pickGreeting(new Date(), {
+      recentReturn,
+      userName: settings?.userName ?? '',
+    }));
     setState('waking');
     if (settings?.soundsEnabled) playWake();
     setTimeout(() => { setState((s) => (s === 'waking' ? 'idle' : s)); }, 850);
@@ -245,6 +278,7 @@ export default function App() {
       prev?.resolve(false);
       return null;
     });
+    if (happyTimerRef.current) { clearTimeout(happyTimerRef.current); happyTimerRef.current = null; }
     // Any pending shell-command approval cards get auto-cancelled — releases
     // the agent's tool call so it doesn't hang on the API side.
     clearAllApprovals();
@@ -271,13 +305,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentRunning]);
 
-  // Reflect MCP server state changes (crashes) in the banner. We pull straight
-  // from the cache after each `mcp:states-changed` broadcast.
+  // Reflect MCP server state changes in the crashed banner.
   useEffect(() => {
     const handler = () => setCrashedMcp(getCrashedServers());
     on('mcp:states-changed', handler);
     return () => off('mcp:states-changed');
   }, []);
+
+  // Ctrl+Shift+A — wake the mascot and prefill the input with the user's
+  // current selection from the previously active app.
+  useEffect(() => {
+    const handler = async () => {
+      await wake();
+      try {
+        const sel = await invoke('keyboard:read-selection');
+        if (sel) {
+          const quoted = sel.trim().split('\n').map((l) => `> ${l}`).join('\n');
+          setInputPrefill(`${quoted}\n\n`);
+          setContinueCounter(0);
+        }
+      } catch (e) {
+        console.error('[App] ask-with-selection failed:', e);
+      }
+    };
+    on('hotkey:ask-with-selection', handler);
+    return () => off('hotkey:ask-with-selection');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   useEffect(() => {
     if (state === 'sleeping' || agentRunning) return;
@@ -395,6 +449,122 @@ export default function App() {
     setAgentEvents((prev) => [...prev, { type: 'status', message: t('agent.stopped') }]);
   };
 
+  // Markdown export — collects user/assistant turns and writes them to the
+  // clipboard. Returns true on success so callers can show feedback.
+  const exportThreadAsMarkdown = async (): Promise<boolean> => {
+    const msgs = useConversation.getState().messages.filter((m) => m.content.trim().length > 0);
+    if (msgs.length === 0) return false;
+    const date = new Date().toISOString().slice(0, 10);
+    const header = `# ${t('exportMd.title')} — ${date}`;
+    const body = msgs.map((m) => {
+      const label = m.role === 'user' ? t('exportMd.you') : t('exportMd.buddy');
+      return `**${label}:** ${m.content.trim()}`;
+    }).join('\n\n');
+    const md = `${header}\n\n${body}\n`;
+    try {
+      await navigator.clipboard.writeText(md);
+      if (settings?.soundsEnabled) playPasted();
+      return true;
+    } catch (e) {
+      console.error('[App] export failed:', e);
+      return false;
+    }
+  };
+
+  // Slash command dispatcher. Stays in App so commands can mutate state that
+  // InputPanel doesn't know about (active agent, conversation, etc.).
+  const handleSlashCommand = async (cmd: string, args: string) => {
+    if (cmd === '/clear') {
+      conv.reset();
+      setContinueCounter(0);
+      return;
+    }
+    if (cmd === '/sleep') {
+      sleep();
+      return;
+    }
+    if (cmd === '/agent') {
+      const query = args.trim().toLowerCase();
+      if (!query) {
+        conv.addUserMessage(`/agent`);
+        conv.beginAssistantMessage();
+        conv.appendAssistantChunk(t('slash.unknownAgent', { query: '' }));
+        return;
+      }
+      try {
+        const all = await invoke('agents:list');
+        // Fuzzy match: exact, then starts-with, then contains. First hit wins.
+        const lower = (s: string) => s.toLowerCase();
+        const match =
+          all.find((a) => lower(a.name) === query) ||
+          all.find((a) => lower(a.name).startsWith(query)) ||
+          all.find((a) => lower(a.name).includes(query));
+        if (!match) {
+          conv.addUserMessage(`/agent ${args}`);
+          conv.beginAssistantMessage();
+          conv.appendAssistantChunk(t('slash.unknownAgent', { query: args }));
+          return;
+        }
+        await invoke('agents:set-active', match.id);
+        setActiveAgent(match);
+        refreshMemoriesCache();
+        conv.addUserMessage(`/agent ${args}`);
+        conv.beginAssistantMessage();
+        conv.appendAssistantChunk(t('slash.switchedTo', { name: match.name }));
+      } catch (e) {
+        console.error('[App] /agent failed:', e);
+      }
+      return;
+    }
+    if (cmd === '/model') {
+      const val = args.trim().toLowerCase();
+      if (val !== 'haiku' && val !== 'sonnet') {
+        conv.addUserMessage(`/model ${args}`);
+        conv.beginAssistantMessage();
+        conv.appendAssistantChunk(t('slash.modelInvalid', { value: args || '(empty)' }));
+        return;
+      }
+      setForcedModel(val);
+      conv.addUserMessage(`/model ${val}`);
+      conv.beginAssistantMessage();
+      conv.appendAssistantChunk(t('slash.modelSet', { model: val }));
+      return;
+    }
+    if (cmd === '/memory') {
+      const fact = args.trim();
+      if (!fact) {
+        conv.addUserMessage(`/memory`);
+        conv.beginAssistantMessage();
+        conv.appendAssistantChunk(t('slash.memoryEmpty'));
+        return;
+      }
+      try {
+        await invoke('memories:add', fact);
+        refreshMemoriesCache();
+        conv.addUserMessage(`/memory ${fact}`);
+        conv.beginAssistantMessage();
+        conv.appendAssistantChunk(t('slash.memorySaved'));
+        flashState('happy', 800);
+      } catch (e) {
+        console.error('[App] /memory failed:', e);
+      }
+      return;
+    }
+    if (cmd === '/help') {
+      conv.addUserMessage(`/help`);
+      conv.beginAssistantMessage();
+      conv.appendAssistantChunk(`${t('slash.helpHeader')}\n\n${t('slash.helpList')}`);
+      return;
+    }
+    if (cmd === '/export') {
+      const ok = await exportThreadAsMarkdown();
+      conv.addUserMessage(`/export`);
+      conv.beginAssistantMessage();
+      conv.appendAssistantChunk(ok ? t('slash.exportCopied') : t('slash.exportEmpty'));
+      return;
+    }
+  };
+
   const handleSubmit = async (text: string) => {
     if (agentMode) { startAgent(text); return; }
     setContinueCounter(0);
@@ -406,6 +576,7 @@ export default function App() {
     conv.setStatus('thinking');
     setState('thinking');
     setWebSearchUses(0);
+    setExtendedThinking(false);
     if (settings?.soundsEnabled) playSend();
     // Wire up cancellation for the streaming chat. The stop button in the
     // thinking UI calls abortRef.current?.abort() and the SDK respects it.
@@ -431,8 +602,7 @@ export default function App() {
         onModelPicked: (m) => setModelLabel(m.includes('sonnet') ? 'sonnet' : 'haiku'),
         onWebSearchUse: (count) => setWebSearchUses(count),
         onUsage: ({ inputTokens, outputTokens, model }) => {
-          // Estimate cost with hardcoded per-Mtok rates. Numbers chosen so the
-          // user sees a ballpark — we don't try to bill them.
+          // Estimate cost with hardcoded per-Mtok rates.
           const rates = model.includes('sonnet')
             ? { inUsdPerMtok: 3, outUsdPerMtok: 15 }
             : { inUsdPerMtok: 1, outUsdPerMtok: 5 };
@@ -446,6 +616,7 @@ export default function App() {
             lastModel: model,
           }));
         },
+        onExtendedThinking: () => setExtendedThinking(true),
         onToolUse: (name, input) => {
           if (!firstChunkSeen) {
             firstChunkSeen = true;
@@ -454,9 +625,8 @@ export default function App() {
             setState('talking');
           }
           // Encode the tool input args as base64 so the marker is robust to
-          // `]]` chars in JSON. The ResponseView decodes on render and shows a
-          // collapsible details block. We skip the payload when input is empty
-          // to keep the chip clean (most server-side tools like web_search).
+          // `]]` chars in JSON. ResponseView decodes on render and shows a
+          // collapsible details block.
           const hasInput = input && Object.keys(input).length > 0;
           if (hasInput) {
             try {
@@ -469,13 +639,21 @@ export default function App() {
           } else {
             conv.appendAssistantChunk(`\n\n[[step:${name}]]\n\n`);
           }
-          if (settings?.soundsEnabled && name === 'edit_in_place') playPasted();
+          if (settings?.soundsEnabled && name === 'edit_in_place') {
+            playPasted();
+            flashState('happy', 800);
+          }
         },
-      }, snapshotAttachedPaths, controller.signal);
+      }, snapshotAttachedPaths, {
+        forcedModel,
+        userName: settings?.userName ?? '',
+        awarenessEnabled: settings?.awarenessEnabled ?? true,
+      });
       while (useConversation.getState().attachments.length > 0) conv.removeAttachment(0);
       conv.setStatus('idle');
-      setState('idle');
+      // Happy state on success — 1.2s then back to idle.
       if (settings?.soundsEnabled) playDone();
+      flashState('happy', 1200);
     } catch (err) {
       // User-initiated stop: do NOT show error UI. Drop back to idle silently.
       const errLike = err as { name?: string; message?: string };
@@ -499,11 +677,15 @@ export default function App() {
       // (e.g. "Open config" only for key-related failures).
       conv.setError(msg, KNOWN.includes(code) ? code : 'UNKNOWN');
       conv.setStatus('error');
-      setState('idle');
+      // Confused state on error — 1.5s.
       if (settings?.soundsEnabled) playError();
+      flashState('confused', 1500);
     } finally {
       // Clear the active abort handle whether we succeeded or failed.
       if (abortRef.current === controller) abortRef.current = null;
+      // /model is a per-turn override — clear after the turn fires.
+      setForcedModel(null);
+      setExtendedThinking(false);
     }
   };
 
@@ -739,6 +921,23 @@ export default function App() {
               )}
             </>
           }
+          headerActions={
+            conv.messages.length > 0 ? (
+              <button
+                onClick={async () => {
+                  const ok = await exportThreadAsMarkdown();
+                  if (ok) {
+                    setExportedRecently(true);
+                    setTimeout(() => setExportedRecently(false), 1500);
+                  }
+                }}
+                className="bubble-close"
+                title={exportedRecently ? t('bubble.exportDone') : t('bubble.export')}
+                aria-label={t('bubble.export')}
+                style={{ fontSize: 14 }}
+              >{exportedRecently ? '✓' : '↗'}</button>
+            ) : null
+          }
         >
           {/* Collapsed-response strip: appears after the user clicks Continue. */}
           {collapsedResponse && lastAssistant && (
@@ -885,11 +1084,14 @@ export default function App() {
               onToggleAgent={() => setAgentMode((v) => !v)}
               disabled={conv.status === 'thinking' || conv.status === 'talking'}
               lastPrompts={userPromptHistory}
+              locale={settings?.locale ?? 'en'}
+              onSlashCommand={handleSlashCommand}
+              prefill={inputPrefill}
             />
           )}
           {conv.status === 'thinking' && (
             <div className="cb-thinking">
-              {t('bubble.thinking')}
+              {extendedThinking ? t('bubble.thinkingDeep') : t('bubble.thinking')}
               <span className="cb-thinking-dots"><span></span><span></span><span></span></span>
               <button
                 type="button"

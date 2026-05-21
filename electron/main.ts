@@ -28,7 +28,7 @@ import {
 } from './agents';
 import { captureScreenRegion } from './capture';
 import { readClipboard } from './clipboard-watcher';
-import { pasteToActiveWindow, captureActiveWindow, registerOwnHwnd, getLastForegroundHwnd, copyFromActiveWindow } from './keyboard';
+import { pasteToActiveWindow, captureActiveWindow, registerOwnHwnd, getLastForegroundHwnd, copyFromActiveWindow, getActiveApp } from './keyboard';
 import {
   getScreenshot, getScreenSize, moveMouse, mouseClick, doubleClick,
   typeText, pressKey, scroll, cursorPosition,
@@ -606,6 +606,7 @@ function bootstrap() {
         console.error('[main] paste failed:', e);
       }
     },
+    'keyboard:get-active-app': () => getActiveApp(),
   });
 
   if (!getApiKey()) {

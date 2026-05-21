@@ -19,17 +19,24 @@ function bonusFromDay(day: number, hour: number, pools: { monday: string[]; frid
 }
 
 export interface PickGreetingOpts {
-  /** Whether the user just sleep/woke very quickly — pick a teasing line. */
+  /** Whether the user just slept/woke very quickly — pick a teasing line. */
   recentReturn?: boolean;
+  /** Optional user name interpolated into `{userName}` placeholders. */
+  userName?: string;
 }
 
+/**
+ * Pick a contextual greeting. When `opts.userName` is non-empty, any
+ * `{userName}` placeholder in the picked line is interpolated — lines
+ * without the placeholder are returned as-is.
+ */
 export function pickGreeting(now: Date = new Date(), opts: PickGreetingOpts = {}): string {
   const greetings = dict(getLocale()).greeting;
-  // Special-case: if the user woke us up again almost immediately, pull from
-  // the dedicated "wait, you again?" pool. Falls back to default if missing.
+  // Recently returned? Pull from the "wait, you again?" pool.
   if (opts.recentReturn && Array.isArray(greetings.recentReturn) && greetings.recentReturn.length > 0) {
     const pool = greetings.recentReturn;
-    return pool[Math.floor(Math.random() * pool.length)];
+    const raw = pool[Math.floor(Math.random() * pool.length)];
+    return interpolateUserName(raw, opts.userName ?? '');
   }
   const hour = now.getHours();
   const day = now.getDay();
@@ -38,5 +45,12 @@ export function pickGreeting(now: Date = new Date(), opts: PickGreetingOpts = {}
     ...bonusFromDay(day, hour, greetings),
     ...greetings.generic,
   ];
-  return pool[Math.floor(Math.random() * pool.length)];
+  const raw = pool[Math.floor(Math.random() * pool.length)];
+  return interpolateUserName(raw, opts.userName ?? '');
+}
+
+function interpolateUserName(raw: string, userName: string): string {
+  // No name set: strip the placeholder gracefully ("Good morning, !" → "Good morning!").
+  if (!userName.trim()) return raw.replace(/,?\s*\{userName\}/g, '');
+  return raw.replace(/\{userName\}/g, userName.trim());
 }

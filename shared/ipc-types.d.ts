@@ -21,6 +21,8 @@ export interface AppSettingsDTO {
     soundsVolume: number;
     locale: Locale;
     respondInUserLanguage: boolean;
+    userName: string;
+    awarenessEnabled: boolean;
 }
 export interface AgentMemoriesGroupDTO {
     agentId: string;
@@ -53,6 +55,10 @@ export interface MCPTestResultDTO {
     ok: boolean;
     error?: string;
     tools?: string[];
+}
+export interface ActiveAppInfo {
+    processName: string;
+    windowTitle: string;
 }
 export interface IpcRequests {
     'config:get-api-key': () => string | null;
@@ -141,6 +147,7 @@ export interface IpcRequests {
     }) => void;
     'keyboard:paste-to-active': (text: string) => void;
     'keyboard:read-selection': () => string | null;
+    'keyboard:get-active-app': () => ActiveAppInfo | null;
     'agent:screen-size': () => {
         realWidth: number;
         realHeight: number;
@@ -299,5 +306,6 @@ export interface IpcRequests {
 }
 export interface IpcEvents {
     'hotkey:activate': void;
+    'hotkey:ask-with-selection': void;
 }
 export type IpcChannel = keyof IpcRequests;
