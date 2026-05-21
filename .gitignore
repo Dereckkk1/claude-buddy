@@ -15,3 +15,4 @@ shared/*.d.ts
 vite.config.js
 vite.config.d.ts
 *.tsbuildinfo
+.claude/worktrees/

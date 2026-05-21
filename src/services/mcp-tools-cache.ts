@@ -29,6 +29,14 @@ export function getMCPStates(): MCPServerState[] {
   return statesCache;
 }
 
+/**
+ * IDs of MCP servers that crashed. Used by the chat bubble to surface a
+ * dismissable banner so users notice when configured servers fail to start.
+ */
+export function getCrashedServers(): string[] {
+  return statesCache.filter((s) => s.status === 'crashed').map((s) => s.id);
+}
+
 async function refresh(): Promise<void> {
   try {
     const [tools, states] = await Promise.all([

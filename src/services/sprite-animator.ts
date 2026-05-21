@@ -1,4 +1,11 @@
-export type SpriteState = 'sleeping' | 'waking' | 'idle' | 'thinking' | 'talking';
+export type SpriteState =
+  | 'sleeping'
+  | 'waking'
+  | 'idle'
+  | 'thinking'
+  | 'talking'
+  | 'happy'
+  | 'confused';
 
 export interface StateDef {
   frames: number;

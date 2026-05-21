@@ -249,6 +249,88 @@ export async function readFile(
   throw new Error('not implemented');
 }
 
+// Hard cap so a runaway folder (e.g. /, /home) doesn't spin counting forever.
+// Anything past this point gets `truncated: true` and we stop walking.
+const COUNT_ENTRIES_HARD_CAP = 5000;
+
+/**
+ * Lightweight directory walk that only COUNTS entries (no metadata gathered).
+ * Applies IGNORE_PATTERNS + .gitignore so the number matches what the agent
+ * will actually see via list_folder. Stops early at COUNT_ENTRIES_HARD_CAP.
+ */
+export async function countFolderEntries(
+  rootPath: string,
+): Promise<{ entryCount: number; truncated: boolean }> {
+  const giLines = await readGitignoreLines(rootPath);
+  const ig = buildIgnoreMatcher(giLines);
+  let count = 0;
+  let truncated = false;
+
+  async function walk(currentPath: string, relPrefix: string, depth: number): Promise<void> {
+    if (truncated) return;
+    if (depth > LIMITS.maxRecursionDepth) return;
+    const dirents = await fs.readdir(currentPath, { withFileTypes: true }).catch(() => []);
+    for (const d of dirents) {
+      if (truncated) return;
+      const rel = relPrefix ? `${relPrefix}/${d.name}` : d.name;
+      if (matches(ig, rel, d.isDirectory())) continue;
+      count += 1;
+      if (count >= COUNT_ENTRIES_HARD_CAP) { truncated = true; return; }
+      if (d.isDirectory()) {
+        await walk(path.join(currentPath, d.name), rel, depth + 1);
+      }
+    }
+  }
+
+  await walk(rootPath, '', 0);
+  return { entryCount: count, truncated };
+}
+
+/**
+ * Read an image file and return an Attachment-shaped object (kind/mimeType/base64).
+ * Mirrors readImageFile but returns the renderer-friendly shape and enforces
+ * the 5MB cap used by drop-as-attachment. Returns null if not an image,
+ * unreadable, or too big — caller decides the fallback.
+ */
+export async function readImageAsAttachment(
+  filePath: string,
+): Promise<{ kind: 'image'; mimeType: string; base64: string } | null> {
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  if (!IMAGE_EXTS.has(ext)) return null;
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (!stat || stat.size === 0) return null;
+  if (stat.size > 5 * 1024 * 1024) return null;
+  const buf = await fs.readFile(filePath).catch(() => null);
+  if (!buf) return null;
+  return {
+    kind: 'image',
+    mimeType: MIME_BY_EXT[ext] ?? 'application/octet-stream',
+    base64: buf.toString('base64'),
+  };
+}
+
+/**
+ * Heuristic check: is this folder one of the "sensitive" user-data locations
+ * (whole home dir, Desktop, Documents, Downloads, .ssh, .aws)? Used to warn
+ * the user before attaching the entire thing for agent access.
+ */
+export function isSensitiveFolder(folderPath: string): boolean {
+  const abs = path.resolve(folderPath);
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  const homeResolved = home ? path.resolve(home) : '';
+  if (homeResolved && abs.toLowerCase() === homeResolved.toLowerCase()) return true;
+  const base = path.basename(abs).toLowerCase();
+  const SENSITIVE_NAMES = new Set(['desktop', 'documents', 'downloads', '.ssh', '.aws']);
+  if (!SENSITIVE_NAMES.has(base)) return false;
+  // Only flag when this sensitive-named folder lives directly under the home dir,
+  // so a project's own ./documents doesn't accidentally trip the warning.
+  if (homeResolved) {
+    const parent = path.dirname(abs);
+    return parent.toLowerCase() === homeResolved.toLowerCase();
+  }
+  return true;
+}
+
 /**
  * True if `target` resolves to a location equal to or beneath one of `roots`.
  * Compares resolved absolute paths to avoid `..` escapes.

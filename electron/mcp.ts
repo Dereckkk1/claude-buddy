@@ -400,6 +400,68 @@ export async function stopAll(): Promise<void> {
   await Promise.all(Array.from(runtime.keys()).map((id) => stopServer(id).catch(() => {})));
 }
 
+/**
+ * Test a server config without persisting it. Spawns the process, performs the
+ * MCP handshake, lists tools, then shuts down. Useful for the "Test connection"
+ * button in the settings UI. Has its own 30s timeout to avoid hanging the UI.
+ */
+export async function testConfig(input: Omit<MCPServerConfig, 'id' | 'prefix'>): Promise<{ ok: boolean; error?: string; tools?: string[] }> {
+  let transport: SDKTransport | undefined;
+  let client: SDKClient | undefined;
+  let stderrBuffer = '';
+  try {
+    const { Client } = (await import('@modelcontextprotocol/sdk/client/index.js')) as typeof import('@modelcontextprotocol/sdk/client/index.js');
+    const { StdioClientTransport } = (await import('@modelcontextprotocol/sdk/client/stdio.js')) as typeof import('@modelcontextprotocol/sdk/client/stdio.js');
+
+    const expandedEnv = expandEnvVars(input.env ?? {});
+    const env: Record<string, string> = {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter((p): p is [string, string] => typeof p[1] === 'string'),
+      ),
+      ...expandedEnv,
+    };
+
+    transport = new StdioClientTransport({
+      command: input.command,
+      args: input.args,
+      env,
+      stderr: 'pipe',
+    }) as unknown as SDKTransport;
+
+    const transportInternal = transport as unknown as { stderr?: NodeJS.ReadableStream };
+    if (transportInternal.stderr && typeof transportInternal.stderr.on === 'function') {
+      transportInternal.stderr.on('data', (chunk: Buffer | string) => {
+        stderrBuffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        if (stderrBuffer.length > 4000) stderrBuffer = stderrBuffer.slice(-4000);
+      });
+    }
+
+    client = new Client({ name: 'claude-buddy-test', version: '0.4.0' }) as unknown as SDKClient;
+    await client.connect(transport, { timeout: 30_000 });
+    const listed = await client.listTools();
+    const tools = (listed.tools ?? []).map((t) => t.name);
+    return { ok: true, tools };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: stderrBuffer ? `${msg}\n— stderr —\n${stderrBuffer}` : msg };
+  } finally {
+    try { if (client) await client.close().catch(() => {}); } catch { /* swallow */ }
+    try { if (transport) await transport.close().catch(() => {}); } catch { /* swallow */ }
+  }
+}
+
+/**
+ * Returns the last known error message + stderr for a given server. Used by
+ * the "View logs" button when a server is in `crashed` state.
+ */
+export function getServerErrorInfo(id: string): { errorMessage?: string; stderr?: string } {
+  const entry = runtime.get(id);
+  if (!entry) return {};
+  // The errorMessage in state already contains the joined stderr; we surface
+  // the whole thing so the UI can show it as-is.
+  return { errorMessage: entry.state.errorMessage };
+}
+
 // ─── Tool execution ─────────────────────────────────────────────────────────
 
 export async function callTool(

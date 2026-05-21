@@ -1,9 +1,13 @@
-import { app, BrowserWindow, session, screen, dialog } from 'electron';
+import { app, BrowserWindow, clipboard, session, screen, dialog, Notification, shell } from 'electron';
 import path from 'node:path';
-import { stat as fsStat } from 'node:fs/promises';
+import { stat as fsStat, readFile as fsReadFile, writeFile as fsWriteFile } from 'node:fs/promises';
 import { basename, resolve as resolvePath } from 'node:path';
-import { listFolder, readFile as readFileFs, pathIsWithin } from './files';
-import { runPowerShell } from './shell';
+import { translate } from '../shared/i18n-strings';
+import {
+  listFolder, readFile as readFileFs, pathIsWithin,
+  countFolderEntries, readImageAsAttachment, isSensitiveFolder,
+} from './files';
+import { runPowerShell, killCommand, extendTimeout } from './shell';
 import * as mcp from './mcp';
 import { createMascotWindow } from './window-manager';
 import { registerHandlers } from './ipc';
@@ -11,23 +15,28 @@ import {
   getApiKey, setApiKey, getPosition, setPosition,
   listMemories, addMemory, deleteMemory, clearMemories,
   getSettings, updateSettings,
+  addRunCommandPattern, listRunCommandAllowlist, matchesRunCommandAllowlist,
+  isFirstBoot, hasSeenIntro, markIntroSeen, getWakeCount, bumpWakeCount,
+  getLastBootNotificationDate, setLastBootNotificationDate,
+  type Locale,
 } from './store';
 import {
   initAgentsIfNeeded, listAgents, getActiveAgent, setActiveAgent,
   createAgent, updateAgent, deleteAgent,
   addMemoryToAgent, deleteMemoryFromAgent, clearMemoriesForAgent,
+  listAllMemoriesByAgent, duplicateBuiltIn,
 } from './agents';
 import { captureScreenRegion } from './capture';
 import { readClipboard } from './clipboard-watcher';
-import { pasteToActiveWindow, captureActiveWindow, registerOwnHwnd, getLastForegroundHwnd, copyFromActiveWindow } from './keyboard';
+import { pasteToActiveWindow, captureActiveWindow, registerOwnHwnd, getLastForegroundHwnd, copyFromActiveWindow, getActiveApp } from './keyboard';
 import {
   getScreenshot, getScreenSize, moveMouse, mouseClick, doubleClick,
   typeText, pressKey, scroll, cursorPosition,
 } from './automation';
 import { pickAndParseFile } from './file-parser';
 import { synthesize, getVoices, defaultVoiceFor, languageOfVoice } from './edge-tts';
-import { registerHotkeys, unregisterHotkeys } from './hotkeys';
-import { createTray, destroyTray, refreshTrayMenu } from './tray';
+import { registerHotkeys, unregisterHotkeys, reregisterHotkey, isAcceleratorInUse } from './hotkeys';
+import { createTray, destroyTray, refreshTrayMenu, setTrayState } from './tray';
 import { setupAutoUpdater } from './updater';
 
 let mascotWin: BrowserWindow | null = null;
@@ -36,6 +45,19 @@ let settingsWin: BrowserWindow | null = null;
 let attachedScope: string[] = []; // absolute paths the user has explicitly attached
 const isDev = !app.isPackaged;
 const startHidden = process.argv.includes('--hidden');
+
+// Registry of clipboard snapshots taken before edit_in_place paste, so the
+// renderer can request an undo (re-paste of the previous content) after the
+// fact. Keyed by a token surfaced into the response stream.
+const undoPasteRegistry = new Map<string, string>();
+export function rememberUndoPasteSnapshot(token: string, original: string): void {
+  undoPasteRegistry.set(token, original);
+  // Cap to avoid leaking memory across long sessions.
+  if (undoPasteRegistry.size > 50) {
+    const firstKey = undoPasteRegistry.keys().next().value;
+    if (firstKey) undoPasteRegistry.delete(firstKey);
+  }
+}
 
 function createConfigWindow(): BrowserWindow {
   if (configWin) { configWin.focus(); return configWin; }
@@ -58,6 +80,15 @@ function createConfigWindow(): BrowserWindow {
     win.loadFile('dist/config-window/index.html');
   }
   configWin = win;
+  // If the user closes the config X without ever providing a key AND no
+  // mascot exists yet, the app would linger as a tray-less zombie process.
+  // Quit cleanly in that case so it doesn't sit invisible in Task Manager.
+  win.on('close', () => {
+    if (!getApiKey() && !mascotWin) {
+      // Defer so the close event finishes propagating before we tear down.
+      setImmediate(() => app.quit());
+    }
+  });
   win.on('closed', () => { configWin = null; });
   return win;
 }
@@ -118,14 +149,51 @@ function startMascot() {
     setTimeout(() => { captureActiveWindow(); }, 80);
   });
 
-  registerHotkeys(() => mascotWin);
+  registerHotkeys(() => mascotWin, getSettings().hotkey);
   createTray(() => mascotWin, () => createConfigWindow(), () => createSettingsWindow());
 
   // Poll foreground every 1.5s as a safety net.
   setInterval(() => { captureActiveWindow(); }, 1500);
 }
 
+// Map the OS locale (BCP-47 like "pt-BR", "es-MX") to one of our supported
+// locales. Anything we don't speak falls back to English.
+function detectOsLocale(): Locale {
+  const raw = app.getLocale().toLowerCase();
+  if (raw.startsWith('pt')) return 'pt';
+  if (raw.startsWith('es')) return 'es';
+  return 'en';
+}
+
+// Fire a Windows native toast once per calendar day when the app boots
+// hidden via --hidden (autostart). Without this, users forget the app is
+// even running and never discover the hotkey.
+function maybeShowDailyBootNotification(): void {
+  if (!startHidden) return;
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  if (getLastBootNotificationDate() === today) return;
+  setLastBootNotificationDate(today);
+  try {
+    const locale = getSettings().locale;
+    new Notification({
+      title: translate(locale, 'onboarding.bootNotificationTitle'),
+      body: translate(locale, 'onboarding.bootNotificationBody'),
+    }).show();
+  } catch (e) {
+    console.warn('[main] boot notification failed:', e);
+  }
+}
+
 function bootstrap() {
+  // First-run locale detection: seed settings.locale from the OS so PT/ES
+  // users don't get an English-only experience on day one. We persist a
+  // minimal settings object so subsequent boots take the normal path.
+  if (isFirstBoot()) {
+    const detected = detectOsLocale();
+    updateSettings({ locale: detected });
+    console.log('[main] first-boot locale detected:', detected);
+  }
+
   // Migrate legacy memories into the Buddy agent on first run
   initAgentsIfNeeded(listMemories());
 
@@ -149,12 +217,30 @@ function bootstrap() {
     args: ['--hidden'],
   });
 
+  maybeShowDailyBootNotification();
+
   registerHandlers({
     'config:get-api-key': () => getApiKey(),
     'config:set-api-key': (key) => {
       setApiKey(key);
       if (!mascotWin) startMascot();
     },
+    'onboarding:first-run-done': () => {
+      // Fired by the config window right after the user saves their first API
+      // key. Boot the mascot (if not already up) and close config — the renderer
+      // picks up `hasSeenIntro=false` and shows the welcome bubble.
+      if (!mascotWin) startMascot();
+      configWin?.close();
+    },
+    'onboarding:get-flags': () => ({
+      hasSeenIntro: hasSeenIntro(),
+      wakeCount: getWakeCount(),
+    }),
+    'onboarding:mark-intro-seen': () => markIntroSeen(),
+    'onboarding:bump-wake-count': () => bumpWakeCount(),
+    'tray:set-state': (state) => setTrayState(state),
+    'config:open': () => { createConfigWindow(); },
+    'shell:open-external': (url) => { void shell.openExternal(url); },
     'position:get': () => getPosition(),
     'position:set': (pos) => setPosition(pos),
     'window:show': () => { mascotWin?.show(); },
@@ -238,7 +324,24 @@ function bootstrap() {
       if (r.canceled || !r.filePaths[0]) return null;
       const p = r.filePaths[0];
       const s = await fsStat(p).catch(() => null);
-      return { path: p, name: basename(p), size: s?.size ?? 0 };
+      const { entryCount, truncated } = await countFolderEntries(p).catch(() => ({ entryCount: 0, truncated: false }));
+      const sensitive = isSensitiveFolder(p);
+      return {
+        path: p,
+        name: basename(p),
+        size: s?.size ?? 0,
+        entryCount,
+        truncated,
+        sensitive,
+      };
+    },
+    'files:read-image-as-attachment': async (filePath: string) => {
+      try {
+        return await readImageAsAttachment(filePath);
+      } catch (e) {
+        console.error('[files] read-image-as-attachment failed:', filePath, e);
+        return null;
+      }
     },
     'mcp:list-configs':   () => mcp.listConfigs(),
     'mcp:add-config':     (input) => mcp.addConfig(input),
@@ -249,32 +352,84 @@ function bootstrap() {
     'mcp:restart-server': async (id) => { await mcp.restartServer(id); },
     'mcp:list-tools':     () => mcp.listAllTools(),
     'mcp:call-tool':      async ({ prefixedName, input }) => mcp.callTool(prefixedName, input),
-    'shell:run-command': async ({ command, cwd, timeoutMs }) => {
+    'mcp:test':           async (config) => mcp.testConfig(config),
+    'mcp:get-stderr':     (id) => mcp.getServerErrorInfo(id),
+    'shell:run-command': async ({ command, cwd, timeoutMs, runId }) => {
       try {
-        const result = await runPowerShell(command, cwd, timeoutMs);
+        const result = await runPowerShell(command, cwd, timeoutMs, runId);
         return { ok: true, result };
       } catch (e) {
         console.error('[shell] run failed:', e);
         return { ok: false, error: e instanceof Error ? e.message : 'spawn failed' };
       }
     },
+    'shell:kill-command': (id) => ({ ok: killCommand(id) }),
+    'shell:extend-timeout': ({ id, deltaMs }) => ({ ok: extendTimeout(id, deltaMs) }),
+    'shell:allowlist-list': () => listRunCommandAllowlist(),
+    'shell:allowlist-add': (pattern) => addRunCommandPattern(pattern),
+    'shell:allowlist-match': (command) => matchesRunCommandAllowlist(command),
+    'clipboard:read-text-for-undo': () => {
+      try {
+        const t = clipboard.readText();
+        // Only treat real text as recoverable; ignore empty clipboards / images.
+        return t && t.length > 0 ? t : null;
+      } catch {
+        return null;
+      }
+    },
+    'automation:register-undo-paste': ({ token, original }) => {
+      rememberUndoPasteSnapshot(token, original);
+    },
+    'automation:undo-paste': async (token) => {
+      const original = undoPasteRegistry.get(token);
+      if (original == null) return { ok: false };
+      undoPasteRegistry.delete(token);
+      mascotWin?.blur();
+      try {
+        await pasteToActiveWindow(original);
+        return { ok: true };
+      } catch (e) {
+        console.error('[main] undo-paste failed:', e);
+        return { ok: false };
+      }
+    },
+    'agent:panic-abort': () => {
+      mascotWin?.webContents.send('agent:panic');
+    },
     'files:resolve-dropped': async (paths) => {
-      const out = [] as Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;
+      const out = [] as Array<{
+        path: string; kind: 'file' | 'folder'; name: string; size: number;
+        entryCount?: number; truncated?: boolean;
+      }>;
       for (const p of paths) {
         const s = await fsStat(p).catch(() => null);
         if (!s) continue;
-        out.push({
-          path: p,
-          kind: s.isDirectory() ? 'folder' : 'file',
-          name: basename(p),
-          size: s.isDirectory() ? 0 : s.size,
-        });
+        if (s.isDirectory()) {
+          const { entryCount, truncated } = await countFolderEntries(p).catch(() => ({ entryCount: 0, truncated: false }));
+          out.push({
+            path: p,
+            kind: 'folder',
+            name: basename(p),
+            size: 0,
+            entryCount,
+            truncated,
+          });
+        } else {
+          out.push({
+            path: p,
+            kind: 'file',
+            name: basename(p),
+            size: s.size,
+          });
+        }
       }
       return out;
     },
     'memories:list': () => getActiveAgent().memories,
+    'memories:list-all': () => listAllMemoriesByAgent(),
     'memories:add': (fact) => addMemoryToAgent(getActiveAgent().id, fact),
     'memories:delete': (i) => deleteMemoryFromAgent(getActiveAgent().id, i),
+    'memories:delete-by-index': ({ agentId, index }) => deleteMemoryFromAgent(agentId, index),
     'memories:clear': () => clearMemoriesForAgent(getActiveAgent().id),
     'agents:list': () => listAgents(),
     'agents:get-active': () => getActiveAgent(),
@@ -285,6 +440,7 @@ function bootstrap() {
     'agents:create': (input) => createAgent(input),
     'agents:update': ({ id, patch }) => updateAgent(id, patch),
     'agents:delete': (id) => deleteAgent(id),
+    'agents:duplicate-builtin': (agentId) => duplicateBuiltIn(agentId),
     'settings:get': () => getSettings(),
     'settings:update': (patch) => {
       // If the locale is changing AND the current voice belongs to a different
@@ -315,11 +471,120 @@ function bootstrap() {
         broadcast('agents:changed', getActiveAgent());
         refreshTrayMenu();
       }
+      // Hotkey change → reregister the global shortcut without restarting.
+      if ('hotkey' in patch && typeof patch.hotkey === 'string') {
+        const ok = reregisterHotkey(patch.hotkey);
+        if (!ok) console.warn('[main] hotkey reregister failed for', patch.hotkey);
+      }
       return next;
     },
     'settings:open': () => { createSettingsWindow(); },
+    'settings:export': async () => {
+      try {
+        const r = await dialog.showSaveDialog({
+          title: 'Export Claude Buddy settings',
+          defaultPath: `claude-buddy-settings-${new Date().toISOString().slice(0, 10)}.json`,
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+        });
+        if (r.canceled || !r.filePath) return { ok: false };
+        const settings = getSettings();
+        const agents = listAgents();
+        const mcpConfigs = mcp.listConfigs();
+        // Strip env vars (may contain secrets) but keep command + args so users
+        // can transplant configs and re-fill env on the new machine.
+        const exportObj = {
+          version: '1.0',
+          exportedAt: Date.now(),
+          settings,
+          agents,
+          mcp: mcpConfigs.map((c) => ({
+            name: c.name,
+            command: c.command,
+            args: c.args,
+            enabled: c.enabled,
+          })),
+        };
+        await fsWriteFile(r.filePath, JSON.stringify(exportObj, null, 2), 'utf8');
+        return { ok: true, path: r.filePath };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'export failed' };
+      }
+    },
+    'settings:import': async () => {
+      try {
+        const r = await dialog.showOpenDialog({
+          title: 'Import Claude Buddy settings',
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+          properties: ['openFile'],
+        });
+        if (r.canceled || !r.filePaths[0]) return { ok: false };
+        const raw = await fsReadFile(r.filePaths[0], 'utf8');
+        const parsed = JSON.parse(raw) as {
+          settings?: Partial<ReturnType<typeof getSettings>>;
+          agents?: Array<{ name: string; emoji: string; systemPrompt: string; model: 'auto' | 'haiku' | 'sonnet'; isBuiltIn?: boolean; sharedMemories?: boolean }>;
+          mcp?: Array<{ name: string; command: string; args: string[]; enabled: boolean }>;
+        };
+        // Merge settings (keep apiKey-bearing concerns out — settings has no apiKey)
+        if (parsed.settings) {
+          updateSettings(parsed.settings);
+        }
+        // Add CUSTOM agents only — never overwrite built-ins
+        if (Array.isArray(parsed.agents)) {
+          for (const a of parsed.agents) {
+            if (a.isBuiltIn) continue;
+            createAgent({
+              name: a.name,
+              emoji: a.emoji,
+              systemPrompt: a.systemPrompt,
+              model: a.model,
+              sharedMemories: a.sharedMemories,
+            });
+          }
+        }
+        // Add MCP configs with empty env (user must re-fill secrets)
+        if (Array.isArray(parsed.mcp)) {
+          for (const c of parsed.mcp) {
+            mcp.addConfig({
+              name: c.name,
+              command: c.command,
+              args: c.args,
+              env: {},
+              enabled: false, // start disabled — env is empty, user reviews first
+            });
+          }
+        }
+        // Broadcast fresh state so UIs reflect the import
+        mascotWin?.webContents.send('agents:changed', getActiveAgent());
+        mascotWin?.webContents.send('settings:changed', getSettings());
+        settingsWin?.webContents.send('settings:changed', getSettings());
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'import failed' };
+      }
+    },
+    'hotkey:test': (combo) => {
+      try {
+        // Empty / obviously invalid accelerators fail registration too.
+        if (!combo || combo.trim().length === 0) return { ok: false, reason: 'invalid' };
+        const inUse = isAcceleratorInUse(combo);
+        // The current hotkey IS registered by us — that's not a conflict.
+        if (inUse && combo !== getSettings().hotkey) {
+          return { ok: false, reason: 'in-use' };
+        }
+        return { ok: true };
+      } catch {
+        return { ok: false, reason: 'invalid' };
+      }
+    },
     'tts:synthesize': ({ text, voice }) => synthesize(text, voice),
     'tts:voices': () => getVoices(),
+    'tts:preview': async ({ voice }) => {
+      // Pull a localized one-liner so the preview matches the chosen voice's
+      // language reasonably (the voice may not match the UI locale, but it's
+      // the cleanest default we can give without a per-voice phrase table).
+      const phrase = translate(getSettings().locale, 'settings.ttsPreviewPhrase');
+      return synthesize(phrase, voice);
+    },
     'keyboard:read-selection': async () => {
       console.log('[main] read-selection invoked, lastFg:', getLastForegroundHwnd());
       mascotWin?.blur();
@@ -341,6 +606,7 @@ function bootstrap() {
         console.error('[main] paste failed:', e);
       }
     },
+    'keyboard:get-active-app': () => getActiveApp(),
   });
 
   if (!getApiKey()) {

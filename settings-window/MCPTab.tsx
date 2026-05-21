@@ -25,19 +25,66 @@ const EMPTY: Omit<MCPServerConfig, 'id' | 'prefix'> = {
   enabled: true,
 };
 
-function statusColor(status: MCPServerStatus): string {
-  switch (status) {
-    case 'running':  return '#788c5d';
-    case 'starting': return '#d97757';
-    case 'crashed':  return '#b03c2a';
-    case 'stopped':  return '#b0aea5';
+// ─── Status pill ────────────────────────────────────────────────────────────
+//
+// Replaces the old colored dot. Shows an icon + label so the state is readable
+// at a glance for color-blind users and matches the visual weight of the
+// rest of the row.
+function StatusPill({ status, label }: { status: MCPServerStatus; label: string }) {
+  const icon = status === 'running' ? '●'
+    : status === 'starting' ? '◐'
+    : status === 'crashed' ? '⚠'
+    : '○';
+  return (
+    <span className={`mcp-status-pill ${status}`}>
+      <span aria-hidden>{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+// ─── Tip helper — surfaces common error patterns with a recovery hint ───────
+function errorTipKey(errorMessage?: string): 'tipEnoent' | 'tipTimeout' | null {
+  if (!errorMessage) return null;
+  const lc = errorMessage.toLowerCase();
+  if (lc.includes('enoent') || lc.includes('not recognized') || lc.includes('command not found')) {
+    return 'tipEnoent';
   }
+  if (lc.includes('timeout') || lc.includes('timed out')) return 'tipTimeout';
+  return null;
+}
+
+// ─── Logs modal ─────────────────────────────────────────────────────────────
+function LogsModal({ config, onClose }: { config: MCPServerConfig; onClose: () => void }) {
+  const t = useT();
+  const [info, setInfo] = useState<{ errorMessage?: string; stderr?: string } | null>(null);
+  useEffect(() => {
+    invoke('mcp:get-stderr', config.id).then(setInfo);
+  }, [config.id]);
+  const tipKey = errorTipKey(info?.errorMessage);
+  return (
+    <div className="mcp-logs-backdrop" onClick={onClose}>
+      <div className="mcp-logs-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="mcp-logs-modal-head">
+          <h3>{t('settings.mcp.logsTitle')} — {config.name}</h3>
+          <button className="cb-btn-ghost-settings" onClick={onClose}>{t('settings.mcp.close')}</button>
+        </div>
+        {tipKey && (
+          <div className="mcp-logs-tip">{t(`settings.mcp.${tipKey}`)}</div>
+        )}
+        <div className="mcp-logs-body">
+          {info?.errorMessage ?? '(no logs available)'}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function MCPTab() {
   const t = useT();
   const [configs, setConfigs] = useState<MCPServerConfig[]>([]);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
+  const [logsFor, setLogsFor] = useState<MCPServerConfig | null>(null);
   const states = useMCPStates();
 
   const refresh = async () => setConfigs(await invoke('mcp:list-configs'));
@@ -84,26 +131,14 @@ export function MCPTab() {
             const statusLabel = t(`settings.mcp.status${st.status.charAt(0).toUpperCase()}${st.status.slice(1)}`);
             return (
               <li key={c.id}>
-                <span
-                  title={st.errorMessage ?? statusLabel}
-                  style={{
-                    display: 'inline-block',
-                    width: 10,
-                    height: 10,
-                    borderRadius: '50%',
-                    background: statusColor(st.status),
-                    marginRight: 10,
-                    flexShrink: 0,
-                  }}
-                />
+                <StatusPill status={st.status} label={statusLabel} />
                 <div className="agent-list-info">
                   <div className="agent-list-name">
                     {c.name}{' '}
                     <span className="agent-list-tag" style={{ marginLeft: 4 }}>{c.prefix}</span>
                   </div>
                   <div className="agent-list-meta">
-                    {c.enabled ? statusLabel : t('settings.mcp.statusStopped')}
-                    {' · '}{t('settings.mcp.toolsCount', { n: st.toolCount })}
+                    {t('settings.mcp.toolsCount', { n: st.toolCount })}
                     {' · '}<code style={{ fontSize: 10 }}>{c.command} {c.args.slice(0, 3).join(' ')}{c.args.length > 3 ? ' …' : ''}</code>
                   </div>
                 </div>
@@ -114,20 +149,24 @@ export function MCPTab() {
                     onChange={async (e) => {
                       await invoke('mcp:update-config', { id: c.id, patch: { enabled: e.target.checked } });
                       await refresh();
-                      // Toggling enabled triggers a start/stop on the server
-                      if (e.target.checked) {
-                        await invoke('mcp:restart-server', c.id);
-                      }
+                      if (e.target.checked) await invoke('mcp:restart-server', c.id);
                     }}
                   />
                   <span></span>
                 </label>
                 {st.status === 'crashed' && (
-                  <button
-                    className="agent-list-action"
-                    style={{ marginRight: 4 }}
-                    onClick={async () => { await invoke('mcp:restart-server', c.id); }}
-                  >{t('settings.mcp.restart')}</button>
+                  <>
+                    <button
+                      className="agent-list-action"
+                      style={{ marginRight: 4 }}
+                      onClick={() => setLogsFor(c)}
+                    >{t('settings.mcp.viewLogs')}</button>
+                    <button
+                      className="agent-list-action"
+                      style={{ marginRight: 4 }}
+                      onClick={async () => { await invoke('mcp:restart-server', c.id); }}
+                    >{t('settings.mcp.restart')}</button>
+                  </>
                 )}
                 <button className="agent-list-action" onClick={() => setMode({ kind: 'edit', config: c })}>{t('settings.mcp.edit')}</button>
               </li>
@@ -136,6 +175,7 @@ export function MCPTab() {
         </ul>
       )}
       <p className="settings-help" style={{ marginTop: 16 }}>{t('settings.mcp.builtInNotice')}</p>
+      {logsFor && <LogsModal config={logsFor} onClose={() => setLogsFor(null)} />}
     </>
   );
 }
@@ -164,27 +204,44 @@ function MCPEditor({ initial, onCancel, onSaved }: EditorProps) {
     () => Object.entries(form.env).map(([k, v]) => ({ k, v, shown: false })),
   );
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string; tools?: string[] } | null>(null);
 
-  const save = async () => {
-    if (!form.name.trim()) { alert(t('settings.agents.needName')); return; }
-    if (!form.command.trim()) { alert(t('settings.mcp.needCommand')); return; }
+  // Helper that builds the config snapshot from current form state
+  const buildConfig = () => {
     const args = argsText.split('\n').map((l) => l.trim()).filter(Boolean);
     const env: Record<string, string> = {};
     for (const row of envRows) {
       if (row.k.trim()) env[row.k.trim()] = row.v;
     }
+    return { ...form, args, env };
+  };
+
+  const save = async () => {
+    if (!form.name.trim()) { alert(t('settings.agents.needName')); return; }
+    if (!form.command.trim()) { alert(t('settings.mcp.needCommand')); return; }
+    const cfg = buildConfig();
     setSaving(true);
     try {
       if (initial) {
-        await invoke('mcp:update-config', { id: initial.id, patch: { ...form, args, env } });
-        // Restart so the changes take effect (only if enabled)
+        await invoke('mcp:update-config', { id: initial.id, patch: cfg });
         if (form.enabled) await invoke('mcp:restart-server', initial.id);
       } else {
-        const created = await invoke('mcp:add-config', { ...form, args, env });
+        const created = await invoke('mcp:add-config', cfg);
         if (form.enabled) await invoke('mcp:restart-server', created.id);
       }
       onSaved();
     } finally { setSaving(false); }
+  };
+
+  const test = async () => {
+    if (!form.command.trim()) { alert(t('settings.mcp.needCommand')); return; }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await invoke('mcp:test', buildConfig());
+      setTestResult(r);
+    } finally { setTesting(false); }
   };
 
   const remove = async () => {
@@ -193,6 +250,8 @@ function MCPEditor({ initial, onCancel, onSaved }: EditorProps) {
     await invoke('mcp:delete-config', initial.id);
     onSaved();
   };
+
+  const testTipKey = testResult?.error ? errorTipKey(testResult.error) : null;
 
   return (
     <>
@@ -296,11 +355,48 @@ function MCPEditor({ initial, onCancel, onSaved }: EditorProps) {
         </label>
       </div>
 
+      {testResult && (
+        <div style={{ marginTop: 12 }}>
+          {testResult.ok ? (
+            <p style={{ color: '#788c5d', margin: 0 }}>
+              ✓ {t('settings.mcp.testOk', { n: testResult.tools?.length ?? 0 })}
+            </p>
+          ) : (
+            <>
+              <p style={{ color: '#b03c2a', margin: 0, fontSize: 13 }}>
+                ✗ {t('settings.mcp.testFailed')}
+              </p>
+              <pre style={{
+                background: 'rgba(176,60,42,0.08)',
+                border: '1px solid rgba(176,60,42,0.3)',
+                borderRadius: 6,
+                padding: 10,
+                fontSize: 11,
+                maxHeight: 140,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                margin: '6px 0 0 0',
+              }}>{testResult.error}</pre>
+              {testTipKey && (
+                <div className="mcp-logs-tip" style={{ margin: '6px 0 0 0' }}>
+                  {t(`settings.mcp.${testTipKey}`)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
-        <div>
+        <div style={{ display: 'flex', gap: 8 }}>
           {initial && (
             <button className="danger-btn" onClick={remove}>{t('settings.mcp.delete')}</button>
           )}
+          <button
+            className="cb-btn-ghost-settings"
+            onClick={test}
+            disabled={testing}
+          >{testing ? t('settings.mcp.testing') : t('settings.mcp.testConnection')}</button>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="cb-btn-ghost-settings" onClick={onCancel}>{t('settings.mcp.cancel')}</button>

@@ -8,6 +8,8 @@ const descriptor: SpriteSheetDescriptor = {
     idle:     { frames: 6, fps: 4, loop: true, nextState: null },
     thinking: { frames: 4, fps: 6, loop: true, nextState: null },
     talking:  { frames: 3, fps: 8, loop: true, nextState: null },
+    happy:    { frames: 2, fps: 6, loop: true, nextState: null },
+    confused: { frames: 4, fps: 5, loop: true, nextState: null },
   },
 };
 

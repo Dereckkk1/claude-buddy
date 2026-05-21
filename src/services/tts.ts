@@ -26,6 +26,22 @@ export function stripMarkdownForSpeech(text: string): string {
 
 let currentAudio: HTMLAudioElement | null = null;
 
+// Listeners notified whenever the speaking state changes (start/end/stop).
+// Subscribers receive `true` when audio starts and `false` when it ends or is
+// stopped — lets the UI react reactively without polling isSpeaking().
+type SpeechListener = (speaking: boolean) => void;
+const speechListeners = new Set<SpeechListener>();
+function emitSpeechState(speaking: boolean): void {
+  speechListeners.forEach((fn) => {
+    try { fn(speaking); } catch { /* ignore listener errors */ }
+  });
+}
+
+export function onSpeechStateChange(fn: SpeechListener): () => void {
+  speechListeners.add(fn);
+  return () => { speechListeners.delete(fn); };
+}
+
 export async function speak(text: string, voice: string, rate = 1.25): Promise<void> {
   const clean = stripMarkdownForSpeech(text);
   if (!clean) return;
@@ -35,10 +51,19 @@ export async function speak(text: string, voice: string, rate = 1.25): Promise<v
     const audio = new Audio(`data:audio/mp3;base64,${base64}`);
     audio.playbackRate = rate;
     currentAudio = audio;
-    audio.onended = () => { if (currentAudio === audio) currentAudio = null; };
+    audio.onended = () => {
+      if (currentAudio === audio) currentAudio = null;
+      emitSpeechState(false);
+    };
+    audio.onerror = () => {
+      if (currentAudio === audio) currentAudio = null;
+      emitSpeechState(false);
+    };
     await audio.play();
+    emitSpeechState(true);
   } catch (e) {
     console.error('[tts] speak failed:', e);
+    emitSpeechState(false);
   }
 }
 
@@ -47,6 +72,7 @@ export function stop(): void {
     currentAudio.pause();
     currentAudio.currentTime = 0;
     currentAudio = null;
+    emitSpeechState(false);
   }
 }
 

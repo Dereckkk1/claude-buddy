@@ -6,7 +6,14 @@ import type { Attachment } from '@/state/conversation';
 
 interface Props {
   onAttach: (a: Attachment) => void;
-  onAttachPath: (p: { kind: 'file' | 'folder'; path: string; name: string; size: number }) => void;
+  onAttachPath: (p: {
+    kind: 'file' | 'folder';
+    path: string;
+    name: string;
+    size: number;
+    entryCount?: number;
+    truncated?: boolean;
+  }) => void;
   onClose: () => void;
 }
 
@@ -55,13 +62,35 @@ export function AttachPicker({ onAttach, onAttachPath, onClose }: Props) {
 
   const handleFile = async () => {
     const result = await invoke('file:pick-and-parse');
-    if (result) onAttach(result);
+    if (!result) return;
+    // [P0-3] Size-cap rejections come back as `{ error: <i18n-key> }`.
+    // Show the user the localized reason instead of silently dropping the
+    // attempt (which is what the old `if (result) ...` branch did).
+    if ('error' in result) {
+      alert(t(result.error));
+      return;
+    }
+    onAttach(result);
   };
 
   const handleFolder = async () => {
     const r = await invoke('files:pick-folder');
     if (!r) return;
-    onAttachPath({ kind: 'folder', path: r.path, name: r.name, size: r.size });
+    // [P2-2] Warn before attaching a sensitive folder (home, Desktop, .ssh,
+    // .aws, Documents, Downloads). The agent gets read access to everything
+    // inside, so we want an explicit "yes" rather than a silent attach.
+    if (r.sensitive) {
+      const ok = window.confirm(t('attach.sensitiveWarning', { name: r.name }));
+      if (!ok) return;
+    }
+    onAttachPath({
+      kind: 'folder',
+      path: r.path,
+      name: r.name,
+      size: r.size,
+      entryCount: r.entryCount,
+      truncated: r.truncated,
+    });
   };
 
   return (
@@ -98,9 +127,20 @@ export function AttachPicker({ onAttach, onAttachPath, onClose }: Props) {
           </button>
         </>
       ) : clipboardItems.length === 0 ? (
+        // [P2-1] Empty clipboard is a dead-end if we just say "empty".
+        // Give them an inline CTA to the screenshot flow (which is the
+        // most common "I want to attach something visual" path).
         <div style={{ padding: '12px', color: 'var(--ink-soft)', fontSize: 12 }}>
-          {t('attach.empty')}
-          <button className="cb-btn cb-btn-ghost" style={{ marginLeft: 8 }} onClick={() => setShowClipboard(false)}>{t('attach.back')}</button>
+          <div style={{ marginBottom: 8 }}>{t('attach.emptyRich')}</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button
+              className="cb-btn cb-btn-secondary"
+              onClick={() => { setShowClipboard(false); handleScreenshot(); }}
+            >
+              {t('attach.emptyShootCta')}
+            </button>
+            <button className="cb-btn cb-btn-ghost" onClick={() => setShowClipboard(false)}>{t('attach.back')}</button>
+          </div>
         </div>
       ) : (
         <>

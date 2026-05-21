@@ -17,6 +17,8 @@ export interface PendingApproval {
   command: string;
   cwd?: string;
   timeoutMs?: number;
+  /** Allowlist hit — the card should render as 'running' from the start. */
+  autoApproved?: boolean;
 }
 
 export interface ApprovalDecision {
@@ -32,8 +34,13 @@ export type CardResult =
   | { kind: 'error'; error: string }
   | { kind: 'cancelled' };
 
-type Entry = PendingApproval & { resolveDecision: (d: ApprovalDecision) => void };
+type Entry = PendingApproval & { resolveDecision: (d: ApprovalDecision) => void; resolved?: boolean };
 
+// Note on lifetime: cards stay in `pending` even AFTER the user resolves their
+// approval (or the entry is auto-approved). This lets CommandApprovalCard render
+// its internal running/result state without being unmounted by the parent's
+// `approvals.map(...)` re-render. The map is cleared en-masse on bubble close
+// via clearAllApprovals().
 const pending = new Map<string, Entry>();
 const pendingListeners = new Set<() => void>();
 const resultListeners = new Map<string, (r: CardResult) => void>();
@@ -53,16 +60,35 @@ export function requestApproval(
   return { id, decision };
 }
 
+/**
+ * Register a card that bypassed approval (allowlist match). The card renders
+ * straight in 'running' state and listens for the result like any other.
+ */
+export function registerAutoApprovedCard(
+  p: Omit<PendingApproval, 'id' | 'autoApproved'>,
+): string {
+  const id = crypto.randomUUID();
+  pending.set(id, {
+    ...p,
+    id,
+    autoApproved: true,
+    resolved: true, // no decision to await
+    // No-op resolver — no user decision is awaited.
+    resolveDecision: () => {},
+  });
+  notifyPending();
+  return id;
+}
+
 export function resolveApproval(id: string, decision: ApprovalDecision): void {
   const entry = pending.get(id);
-  if (!entry) return;
-  pending.delete(id);
+  if (!entry || entry.resolved) return;
+  entry.resolved = true;
   entry.resolveDecision(decision);
-  notifyPending();
-  // If the user denied, the executeTool will never fire publishCardResult.
-  // Surface the cancellation to any card subscriber right away so the UI
-  // can disappear cleanly.
+  // Don't delete from `pending` — keeping the entry there means the card
+  // stays mounted to render its running/result state. See `clearAllApprovals`.
   if (!decision.approved) {
+    // If the user denied, no IPC runs → no publishCardResult will come.
     resultListeners.get(id)?.({ kind: 'cancelled' });
     resultListeners.delete(id);
   }
@@ -96,8 +122,8 @@ export function clearAllApprovals(): void {
 }
 
 export function getPendingApprovals(): PendingApproval[] {
-  return Array.from(pending.values()).map(({ resolveDecision: _r, ...rest }) => {
-    void _r;
+  return Array.from(pending.values()).map(({ resolveDecision: _r, resolved: _x, ...rest }) => {
+    void _r; void _x;
     return rest;
   });
 }

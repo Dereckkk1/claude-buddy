@@ -22,14 +22,61 @@ export interface AppSettingsDTO {
   soundsEnabled: boolean;
   soundsVolume: number;
   locale: Locale;
+  respondInUserLanguage: boolean;
+  userName: string;
+  awarenessEnabled: boolean;
+}
+
+export interface AgentMemoriesGroupDTO {
+  agentId: string;
+  name: string;
+  emoji: string;
+  memories: string[];
+}
+
+export interface SettingsExportDTO {
+  version: string;
+  exportedAt: number;
+  // Subset of settings safe to export (excludes apiKey)
+  settings: AppSettingsDTO;
+  agents: Array<{
+    id: string;
+    name: string;
+    emoji: string;
+    systemPrompt: string;
+    model: 'auto' | 'haiku' | 'sonnet';
+    memories: string[];
+    isBuiltIn: boolean;
+    sharedMemories?: boolean;
+  }>;
+  // MCP configs WITHOUT env vars (security — they may contain API keys)
+  mcp: Array<{
+    name: string;
+    command: string;
+    args: string[];
+    enabled: boolean;
+  }>;
+}
+
+export interface MCPTestResultDTO {
+  ok: boolean;
+  error?: string;
+  tools?: string[];
+}
+
+export interface ActiveAppInfo {
+  processName: string;
+  windowTitle: string;
 }
 
 export interface IpcRequests {
   'config:get-api-key': () => string | null;
   'config:set-api-key': (key: string) => void;
   'memories:list': () => string[];
+  'memories:list-all': () => AgentMemoriesGroupDTO[];
   'memories:add': (fact: string) => void;
   'memories:delete': (index: number) => void;
+  'memories:delete-by-index': (params: { agentId: string; index: number }) => void;
   'memories:clear': () => void;
   'agents:list': () => AgentDTO[];
   'agents:get-active': () => AgentDTO;
@@ -37,11 +84,16 @@ export interface IpcRequests {
   'agents:create': (input: Omit<AgentDTO, 'id' | 'isBuiltIn' | 'memories'>) => AgentDTO;
   'agents:update': (params: { id: string; patch: Partial<Omit<AgentDTO, 'id' | 'isBuiltIn'>> }) => AgentDTO | null;
   'agents:delete': (id: string) => void;
+  'agents:duplicate-builtin': (agentId: string) => AgentDTO | null;
   'settings:get': () => AppSettingsDTO;
   'settings:update': (patch: Partial<AppSettingsDTO>) => AppSettingsDTO;
   'settings:open': () => void;
+  'settings:export': () => { ok: boolean; path?: string; error?: string };
+  'settings:import': () => { ok: boolean; error?: string };
+  'hotkey:test': (combo: string) => { ok: boolean; reason?: 'in-use' | 'invalid' };
   'tts:synthesize': (params: { text: string; voice: string; rate?: number }) => string;
   'tts:voices': () => { id: string; label: string }[];
+  'tts:preview': (params: { voice: string; rate: number }) => string;
   'position:get': () => { x: number; y: number } | null;
   'position:set': (pos: { x: number; y: number }) => void;
   'capture:screen-region': () => { mimeType: string; base64: string } | null;
@@ -56,6 +108,7 @@ export interface IpcRequests {
   'window:set-size': (size: { w: number; h: number }) => void;
   'keyboard:paste-to-active': (text: string) => void;
   'keyboard:read-selection': () => string | null;
+  'keyboard:get-active-app': () => ActiveAppInfo | null;
   'agent:screen-size': () => { realWidth: number; realHeight: number; scaledWidth: number; scaledHeight: number };
   'agent:screenshot': () => { scaledWidth: number; scaledHeight: number; realWidth: number; realHeight: number; base64: string };
   'agent:move-mouse': (params: { x: number; y: number }) => void;
@@ -68,17 +121,53 @@ export interface IpcRequests {
   'file:pick-and-parse': () =>
     | { kind: 'text'; content: string }
     | { kind: 'image'; mimeType: string; base64: string }
+    | { error: string }
     | null;
   'files:list-folder': (params: { path: string; recursive?: boolean }) =>
     { ok: true; listing: import('../electron/files').FolderListing } | { ok: false; error: string };
   'files:read-file': (params: { path: string }) =>
     { ok: true; content: import('../electron/files').FileContent } | { ok: false; error: string };
   'files:set-scope': (paths: string[]) => void;
-  'files:pick-folder': () => { path: string; name: string; size: number } | null;
+  'files:pick-folder': () => {
+    path: string;
+    name: string;
+    size: number;
+    entryCount?: number;
+    truncated?: boolean;
+    sensitive?: boolean;
+  } | null;
   'files:resolve-dropped': (paths: string[]) =>
-    Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;
-  'shell:run-command': (params: { command: string; cwd?: string; timeoutMs?: number }) =>
+    Array<{
+      path: string;
+      kind: 'file' | 'folder';
+      name: string;
+      size: number;
+      entryCount?: number;
+      truncated?: boolean;
+    }>;
+  'files:read-image-as-attachment': (path: string) =>
+    { kind: 'image'; mimeType: string; base64: string } | null;
+  'shell:run-command': (params: { command: string; cwd?: string; timeoutMs?: number; runId?: string }) =>
+
     { ok: true; result: import('../electron/shell').RunResult } | { ok: false; error: string };
+  'shell:kill-command': (id: string) => { ok: boolean };
+  'shell:extend-timeout': (params: { id: string; deltaMs: number }) => { ok: boolean };
+  'shell:allowlist-add': (pattern: string) => string[];
+  'shell:allowlist-list': () => string[];
+  'shell:allowlist-match': (command: string) => boolean;
+  'clipboard:read-text-for-undo': () => string | null;
+  'automation:register-undo-paste': (params: { token: string; original: string }) => void;
+  'automation:undo-paste': (token: string) => { ok: boolean };
+  'agent:panic-abort': () => void;
+
+  // Onboarding & UX state
+  'onboarding:first-run-done': () => void;
+  'onboarding:get-flags': () => { hasSeenIntro: boolean; wakeCount: number };
+  'onboarding:mark-intro-seen': () => void;
+  'onboarding:bump-wake-count': () => number;
+  'tray:set-state': (state: 'sleeping' | 'idle' | 'thinking' | 'error') => void;
+  'config:open': () => void;
+  'shell:open-external': (url: string) => void;
 
   // MCP (Model Context Protocol)
   'mcp:list-configs':   () => import('./mcp-types').MCPServerConfig[];
@@ -93,10 +182,14 @@ export interface IpcRequests {
   'mcp:list-tools':     () => import('./mcp-types').MCPToolDef[];
   'mcp:call-tool':      (params: { prefixedName: string; input: Record<string, unknown> }) =>
                           import('./mcp-types').MCPCallToolResult;
+  'mcp:test':           (config: Omit<import('./mcp-types').MCPServerConfig, 'id' | 'prefix'>) =>
+                          MCPTestResultDTO;
+  'mcp:get-stderr':     (id: string) => { errorMessage?: string; stderr?: string };
 }
 
 export interface IpcEvents {
   'hotkey:activate': void;
+  'hotkey:ask-with-selection': void;
 }
 
 export type IpcChannel = keyof IpcRequests;

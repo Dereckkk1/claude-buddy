@@ -1,7 +1,7 @@
 // Skills que o Claude pode chamar como tools — substituem os toggles manuais.
 import { invoke } from './ipc';
 import { useConversation } from '@/state/conversation';
-import { requestApproval, publishCardResult } from './run-command-bridge';
+import { requestApproval, publishCardResult, registerAutoApprovedCard } from './run-command-bridge';
 import { getMCPToolNames } from './mcp-tools-cache';
 
 export interface ToolDef {
@@ -89,7 +89,16 @@ export interface ToolResult {
   text?: string;
   // Se a tool retorna uma imagem (ex: read_file de PNG/JPG), o tool_result vira um bloco image.
   imageResult?: { base64: string; mimeType: string };
+  // Inline UI marker the streaming layer should splice into the assistant
+  // message (after `[[step:<tool>]]` was already emitted). Used by edit_in_place
+  // (undo chip) and save_memory (expanded chip with index).
+  uiMarker?: string;
 }
+
+// Module-local registry mapping undo tokens → original clipboard text. Lives
+// in the renderer because the IPC roundtrip to read the clipboard happens
+// from here; the main process keeps its own registry for the actual undo
+// dispatch (so we don't ship the original text through IPC twice).
 
 // In-memory cache, refreshed at session start
 let memoriesCache: string[] = [];
@@ -126,10 +135,26 @@ export async function executeTool(name: string, input: Record<string, unknown>):
     case 'edit_in_place': {
       const text = String(input.text ?? '');
       if (!text.trim()) return { content: 'edit_in_place: texto vazio, nada feito.' };
+      // Snapshot whatever the user had in the clipboard before we clobber it.
+      // null means "nothing useful to undo to" — we still proceed, just no chip.
+      let original: string | null = null;
+      try { original = await invoke('clipboard:read-text-for-undo'); } catch { /* swallow */ }
       await invoke('keyboard:paste-to-active', text);
+      let uiMarker: string | undefined;
+      if (original != null) {
+        const token = crypto.randomUUID();
+        // Stash on the main side so the IPC undo handler can find the text.
+        // We send the original through a dedicated channel so this module never
+        // has to store sensitive clipboard content in renderer memory.
+        try {
+          await invoke('automation:register-undo-paste', { token, original });
+          uiMarker = `[[step:edit_in_place_undoable:${token}]]`;
+        } catch { /* swallow: chip just won't show */ }
+      }
       return {
         content: `Colado com sucesso (${text.length} chars).`,
         sideEffect: 'pasted',
+        uiMarker,
       };
     }
     case 'save_memory': {
@@ -137,7 +162,18 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       if (!fact) return { content: 'save_memory: fato vazio.' };
       await invoke('memories:add', fact);
       await refreshMemoriesCache();
-      return { content: `Memória salva: "${fact}"`, sideEffect: 'memory_saved' };
+      // The new index is the last position. Renderer-side cache was just
+      // refreshed so length matches the underlying store.
+      const newIndex = Math.max(0, memoriesCache.length - 1);
+      // Truncate for the chip; full fact stays in memory store.
+      const truncated = fact.length > 80 ? fact.slice(0, 79) + '…' : fact;
+      // Base64-encode to avoid `]]` collisions inside the fact text.
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ index: newIndex, fact: truncated }))));
+      return {
+        content: `Memória salva: "${fact}"`,
+        sideEffect: 'memory_saved',
+        uiMarker: `[[step:save_memory_undo:${payload}]]`,
+      };
     }
     case 'list_folder': {
       const path = String(input.path ?? '');
@@ -169,16 +205,37 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       const attachedFolder = useConversation.getState().attachedPaths.find((p) => p.kind === 'folder');
       const effectiveCwd = explicitCwd ?? attachedFolder?.path;
 
-      const { id, decision: decisionPromise } = requestApproval({ command, cwd: effectiveCwd, timeoutMs });
-      const decision = await decisionPromise;
-      if (!decision.approved) {
-        // resolveApproval already emitted 'cancelled' to the card. Just tell the agent.
-        return { content: JSON.stringify({ cancelled: true, reason: 'user denied' }) };
+      // Persisted allowlist: skip the human-in-the-loop card if the user has
+      // previously said "always allow" for this pattern. Card still mounts in
+      // 'running' state via registerAutoApprovedCard so the run is observable.
+      let id: string;
+      let finalCommand = command;
+      let finalCwd = effectiveCwd;
+      let isAllowlisted = false;
+      try {
+        isAllowlisted = await invoke('shell:allowlist-match', command);
+      } catch { /* swallow: treat as not allowlisted */ }
+      if (isAllowlisted) {
+        id = registerAutoApprovedCard({ command, cwd: effectiveCwd, timeoutMs });
+      } else {
+        const { id: approvalId, decision: decisionPromise } =
+          requestApproval({ command, cwd: effectiveCwd, timeoutMs });
+        const decision = await decisionPromise;
+        if (!decision.approved) {
+          // resolveApproval already emitted 'cancelled' to the card. Just tell the agent.
+          return { content: JSON.stringify({ cancelled: true, reason: 'user denied' }) };
+        }
+        id = approvalId;
+        finalCommand = decision.finalCommand ?? command;
+        finalCwd = decision.finalCwd ?? effectiveCwd;
       }
+      // The card uses the same id as the runId so the renderer can kill/extend
+      // by referring to a single handle.
       const r = await invoke('shell:run-command', {
-        command: decision.finalCommand ?? command,
-        cwd: decision.finalCwd ?? effectiveCwd,
+        command: finalCommand,
+        cwd: finalCwd,
         timeoutMs,
+        runId: id,
       });
       if (!r.ok) {
         publishCardResult(id, { kind: 'error', error: r.error });
