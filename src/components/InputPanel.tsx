@@ -8,11 +8,20 @@ interface Props {
   agentMode: boolean;
   onToggleAgent: () => void;
   disabled?: boolean;
+  /**
+   * Past user prompts in chronological order. ArrowUp on an empty input pulls
+   * the most recent one; consecutive ArrowUps walk further back (terminal-style).
+   * ArrowDown walks forward; reaching the bottom clears the input.
+   */
+  lastPrompts?: string[];
 }
 
-export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disabled }: Props) {
+export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disabled, lastPrompts = [] }: Props) {
   const t = useT();
   const [text, setText] = useState('');
+  // `historyIdx` is the offset from the END of `lastPrompts` (1 = most recent).
+  // -1 means "not browsing history" — typing resets it.
+  const [historyIdx, setHistoryIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -23,6 +32,7 @@ export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disab
     if (!text.trim() || disabled) return;
     onSubmit(text);
     setText('');
+    setHistoryIdx(-1);
   };
 
   return (
@@ -33,8 +43,34 @@ export function InputPanel({ onSubmit, onAttach, agentMode, onToggleAgent, disab
           className="cb-input"
           placeholder={agentMode ? t('input.placeholderAgent') : t('input.placeholder')}
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+          onChange={(e) => { setText(e.target.value); setHistoryIdx(-1); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { handleSubmit(); return; }
+            // Terminal-style history navigation. Only pull from history when the
+            // input is empty OR we're already browsing — otherwise we'd clobber
+            // a draft the user is typing.
+            if (e.key === 'ArrowUp' && lastPrompts.length > 0) {
+              if (text === '' || historyIdx > 0) {
+                e.preventDefault();
+                const nextIdx = Math.min(historyIdx + 1, lastPrompts.length);
+                const item = lastPrompts[lastPrompts.length - nextIdx];
+                if (item !== undefined) {
+                  setHistoryIdx(nextIdx);
+                  setText(item);
+                }
+              }
+            } else if (e.key === 'ArrowDown' && historyIdx > 0) {
+              e.preventDefault();
+              const nextIdx = historyIdx - 1;
+              if (nextIdx <= 0) {
+                setHistoryIdx(-1);
+                setText('');
+              } else {
+                setHistoryIdx(nextIdx);
+                setText(lastPrompts[lastPrompts.length - nextIdx]);
+              }
+            }
+          }}
           disabled={disabled}
           autoFocus
         />

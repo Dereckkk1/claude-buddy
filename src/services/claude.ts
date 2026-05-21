@@ -104,6 +104,8 @@ export interface StreamCallbacks {
   onWebSearchUse?: (count: number) => void;
   /** Fires once at the end of the turn with cumulative usage from finalMessage. */
   onUsage?: (usage: { inputTokens: number; outputTokens: number; model: string }) => void;
+  /** Optional abort signal — passed through to the SDK's `messages.stream`. */
+  signal?: AbortSignal;
 }
 
 function attachmentsToBlocks(attachments: Attachment[]): ContentBlock[] {
@@ -194,6 +196,13 @@ export async function chatWithSkills(
   let totalOutputTokens = 0;
 
   for (let iter = 0; iter < 6; iter++) {
+    // Abort fast path: if caller cancelled between iterations, surface as
+    // AbortError so the App-level handler can suppress error UI.
+    if (callbacks.signal?.aborted) {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
     if (signal?.aborted) return;
     try {
       // Merge native tools + web_search (server-side) + any MCP tools that
@@ -210,7 +219,7 @@ export async function chatWithSkills(
         system,
         tools: [...TOOLS, WEB_SEARCH_TOOL, ...mcpToolDefs] as never,
         messages: apiMessages as never,
-      });
+      }, callbacks.signal ? { signal: callbacks.signal } : undefined);
 
       let textOut = '';
       const toolUses: { id: string; name: string; input: Record<string, unknown> }[] = [];
@@ -322,6 +331,14 @@ export async function chatWithSkills(
       }
       apiMessages.push({ role: 'user', content: toolResults });
     } catch (e) {
+      // Propagate abort errors unchanged — the caller distinguishes between
+      // user-initiated stops (no UI error) and real failures.
+      const errLike = e as { name?: string; message?: string };
+      if (errLike?.name === 'AbortError' || /aborted|abort/i.test(errLike?.message ?? '')) {
+        const ab = new Error('aborted');
+        ab.name = 'AbortError';
+        throw ab;
+      }
       console.error('[claude.ts] chatWithSkills error:', e);
       const err = e as { status?: number; message?: string };
       if (err.status === 401) throw new Error('INVALID_API_KEY');

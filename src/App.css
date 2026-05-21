@@ -862,3 +862,187 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 /* Save-memory chip in ResponseView */
 .cb-step-save-memory { color: var(--ink); }
 .cb-step-edit-undo { color: var(--ink); }
+/* ── User question echo (above the response) ───────────────────────────── */
+.cb-user-question {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin: 0 0 8px 0;
+  padding: 4px 0 8px 0;
+  border-bottom: 1px dashed var(--border);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+  cursor: default;
+}
+.cb-user-question::before {
+  content: "› ";
+  color: var(--clay);
+  font-weight: 600;
+  margin-right: 4px;
+  opacity: 0.75;
+}
+
+/* ── Collapsed-response strip ("↳ previous answer · expand") ───────────── */
+.cb-collapsed-response {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-ghost);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: background 120ms, border-color 120ms;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.cb-collapsed-response:hover { background: var(--bg-ghost-hover); border-color: var(--ink-soft); }
+.cb-collapsed-response-chevron { color: var(--clay); font-weight: 600; flex-shrink: 0; }
+.cb-collapsed-response-text {
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--ink-soft);
+}
+.cb-collapsed-response-action { color: var(--clay); font-weight: 500; flex-shrink: 0; }
+
+/* ── Copy buttons (response + code blocks) ─────────────────────────────── */
+.cb-copy-btn {
+  position: absolute;
+  background: var(--bg-elevated);
+  color: var(--ink-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 22px; height: 22px;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms, color 120ms, background 120ms;
+  font-family: inherit;
+  padding: 0;
+  z-index: 2;
+}
+.cb-copy-btn:hover { color: var(--clay); background: var(--bg-ghost); }
+.cb-copy-btn-response {
+  top: 0; right: 0;
+}
+.cb-markdown:hover > .cb-copy-btn-response { opacity: 0.85; }
+.cb-copy-btn-response:focus-visible { opacity: 1; }
+
+/* Code-block wrapper: positions the floating copy button per-block. */
+.cb-code-wrap { position: relative; }
+.cb-copy-btn-code {
+  top: 6px; right: 6px;
+}
+.cb-code-wrap:hover > .cb-copy-btn-code { opacity: 0.85; }
+.cb-copy-btn-code:focus-visible { opacity: 1; }
+
+/* ── Turn counter chip (header) ────────────────────────────────────────── */
+.cb-turn-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bg-ghost);
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+/* ── Stop streaming button (inline next to thinking dots) ──────────────── */
+.cb-stop-stream {
+  margin-left: 10px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.cb-stop-stream:hover { background: var(--bg-ghost); color: var(--ink); border-color: var(--ink-soft); }
+
+/* ── Syntax highlighting (rehype-highlight + github-dark base) ─────────── */
+/* Light-theme overrides: re-color the most common token classes to GitHub's
+   light palette so the same `.hljs-*` markup looks readable on the warm
+   off-white background. Order matters — these MUST come AFTER the imported
+   highlight.js CSS, which Vite injects at the top of the bundle. */
+:root[data-theme="light"] .hljs,
+:root:not([data-theme="dark"]) .hljs {
+  color: #24292e;
+  background: transparent;
+}
+:root[data-theme="light"] .hljs-keyword,
+:root[data-theme="light"] .hljs-selector-tag,
+:root[data-theme="light"] .hljs-doctag,
+:root[data-theme="light"] .hljs-formula,
+:root:not([data-theme="dark"]) .hljs-keyword,
+:root:not([data-theme="dark"]) .hljs-selector-tag { color: #d73a49; }
+:root[data-theme="light"] .hljs-title,
+:root[data-theme="light"] .hljs-title.class_,
+:root[data-theme="light"] .hljs-title.function_,
+:root:not([data-theme="dark"]) .hljs-title { color: #6f42c1; }
+:root[data-theme="light"] .hljs-attr,
+:root[data-theme="light"] .hljs-attribute,
+:root[data-theme="light"] .hljs-variable,
+:root[data-theme="light"] .hljs-template-variable,
+:root[data-theme="light"] .hljs-type,
+:root[data-theme="light"] .hljs-selector-class,
+:root[data-theme="light"] .hljs-selector-attr,
+:root[data-theme="light"] .hljs-selector-pseudo,
+:root[data-theme="light"] .hljs-number,
+:root:not([data-theme="dark"]) .hljs-number,
+:root:not([data-theme="dark"]) .hljs-attr { color: #005cc5; }
+:root[data-theme="light"] .hljs-string,
+:root[data-theme="light"] .hljs-regexp,
+:root[data-theme="light"] .hljs-symbol,
+:root:not([data-theme="dark"]) .hljs-string { color: #032f62; }
+:root[data-theme="light"] .hljs-comment,
+:root[data-theme="light"] .hljs-quote,
+:root:not([data-theme="dark"]) .hljs-comment { color: #6a737d; }
+:root[data-theme="light"] .hljs-built_in,
+:root[data-theme="light"] .hljs-name,
+:root:not([data-theme="dark"]) .hljs-built_in { color: #e36209; }
+:root[data-theme="light"] .hljs-section,
+:root[data-theme="light"] .hljs-strong { color: #24292e; font-weight: bold; }
+:root[data-theme="light"] .hljs-emphasis { color: #24292e; font-style: italic; }
+/* Keep code-block background using our own var so it always blends. */
+.cb-markdown pre .hljs { background: transparent !important; padding: 0; }
+
+/* ── TTS playing indicator (3 pulsing bars) ────────────────────────────── */
+.cb-tts-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 6px;
+  height: 12px;
+  vertical-align: middle;
+}
+.cb-tts-indicator span {
+  display: inline-block;
+  width: 2.5px;
+  background: var(--clay);
+  border-radius: 1px;
+  animation: cb-tts-bar 0.9s ease-in-out infinite;
+  transform-origin: center;
+}
+.cb-tts-indicator span:nth-child(1) { animation-delay: 0s;    height: 6px; }
+.cb-tts-indicator span:nth-child(2) { animation-delay: 0.15s; height: 10px; }
+.cb-tts-indicator span:nth-child(3) { animation-delay: 0.3s;  height: 8px; }
+@keyframes cb-tts-bar {
+  0%, 100% { transform: scaleY(0.45); opacity: 0.55; }
+  50%      { transform: scaleY(1);    opacity: 1; }
+}
