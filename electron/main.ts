@@ -1,7 +1,8 @@
 import { app, BrowserWindow, session, screen, dialog } from 'electron';
 import path from 'node:path';
-import { stat as fsStat } from 'node:fs/promises';
+import { stat as fsStat, readFile as fsReadFile, writeFile as fsWriteFile } from 'node:fs/promises';
 import { basename, resolve as resolvePath } from 'node:path';
+import { translate } from '../shared/i18n-strings';
 import { listFolder, readFile as readFileFs, pathIsWithin } from './files';
 import { runPowerShell } from './shell';
 import * as mcp from './mcp';
@@ -16,6 +17,7 @@ import {
   initAgentsIfNeeded, listAgents, getActiveAgent, setActiveAgent,
   createAgent, updateAgent, deleteAgent,
   addMemoryToAgent, deleteMemoryFromAgent, clearMemoriesForAgent,
+  listAllMemoriesByAgent, duplicateBuiltIn,
 } from './agents';
 import { captureScreenRegion } from './capture';
 import { readClipboard } from './clipboard-watcher';
@@ -26,7 +28,7 @@ import {
 } from './automation';
 import { pickAndParseFile } from './file-parser';
 import { synthesize, getVoices, defaultVoiceFor, languageOfVoice } from './edge-tts';
-import { registerHotkeys, unregisterHotkeys } from './hotkeys';
+import { registerHotkeys, unregisterHotkeys, reregisterHotkey, isAcceleratorInUse } from './hotkeys';
 import { createTray, destroyTray, refreshTrayMenu } from './tray';
 import { setupAutoUpdater } from './updater';
 
@@ -118,7 +120,7 @@ function startMascot() {
     setTimeout(() => { captureActiveWindow(); }, 80);
   });
 
-  registerHotkeys(() => mascotWin);
+  registerHotkeys(() => mascotWin, getSettings().hotkey);
   createTray(() => mascotWin, () => createConfigWindow(), () => createSettingsWindow());
 
   // Poll foreground every 1.5s as a safety net.
@@ -249,6 +251,8 @@ function bootstrap() {
     'mcp:restart-server': async (id) => { await mcp.restartServer(id); },
     'mcp:list-tools':     () => mcp.listAllTools(),
     'mcp:call-tool':      async ({ prefixedName, input }) => mcp.callTool(prefixedName, input),
+    'mcp:test':           async (config) => mcp.testConfig(config),
+    'mcp:get-stderr':     (id) => mcp.getServerErrorInfo(id),
     'shell:run-command': async ({ command, cwd, timeoutMs }) => {
       try {
         const result = await runPowerShell(command, cwd, timeoutMs);
@@ -273,8 +277,10 @@ function bootstrap() {
       return out;
     },
     'memories:list': () => getActiveAgent().memories,
+    'memories:list-all': () => listAllMemoriesByAgent(),
     'memories:add': (fact) => addMemoryToAgent(getActiveAgent().id, fact),
     'memories:delete': (i) => deleteMemoryFromAgent(getActiveAgent().id, i),
+    'memories:delete-by-index': ({ agentId, index }) => deleteMemoryFromAgent(agentId, index),
     'memories:clear': () => clearMemoriesForAgent(getActiveAgent().id),
     'agents:list': () => listAgents(),
     'agents:get-active': () => getActiveAgent(),
@@ -285,6 +291,7 @@ function bootstrap() {
     'agents:create': (input) => createAgent(input),
     'agents:update': ({ id, patch }) => updateAgent(id, patch),
     'agents:delete': (id) => deleteAgent(id),
+    'agents:duplicate-builtin': (agentId) => duplicateBuiltIn(agentId),
     'settings:get': () => getSettings(),
     'settings:update': (patch) => {
       // If the locale is changing AND the current voice belongs to a different
@@ -315,11 +322,120 @@ function bootstrap() {
         broadcast('agents:changed', getActiveAgent());
         refreshTrayMenu();
       }
+      // Hotkey change → reregister the global shortcut without restarting.
+      if ('hotkey' in patch && typeof patch.hotkey === 'string') {
+        const ok = reregisterHotkey(patch.hotkey);
+        if (!ok) console.warn('[main] hotkey reregister failed for', patch.hotkey);
+      }
       return next;
     },
     'settings:open': () => { createSettingsWindow(); },
+    'settings:export': async () => {
+      try {
+        const r = await dialog.showSaveDialog({
+          title: 'Export Claude Buddy settings',
+          defaultPath: `claude-buddy-settings-${new Date().toISOString().slice(0, 10)}.json`,
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+        });
+        if (r.canceled || !r.filePath) return { ok: false };
+        const settings = getSettings();
+        const agents = listAgents();
+        const mcpConfigs = mcp.listConfigs();
+        // Strip env vars (may contain secrets) but keep command + args so users
+        // can transplant configs and re-fill env on the new machine.
+        const exportObj = {
+          version: '1.0',
+          exportedAt: Date.now(),
+          settings,
+          agents,
+          mcp: mcpConfigs.map((c) => ({
+            name: c.name,
+            command: c.command,
+            args: c.args,
+            enabled: c.enabled,
+          })),
+        };
+        await fsWriteFile(r.filePath, JSON.stringify(exportObj, null, 2), 'utf8');
+        return { ok: true, path: r.filePath };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'export failed' };
+      }
+    },
+    'settings:import': async () => {
+      try {
+        const r = await dialog.showOpenDialog({
+          title: 'Import Claude Buddy settings',
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+          properties: ['openFile'],
+        });
+        if (r.canceled || !r.filePaths[0]) return { ok: false };
+        const raw = await fsReadFile(r.filePaths[0], 'utf8');
+        const parsed = JSON.parse(raw) as {
+          settings?: Partial<ReturnType<typeof getSettings>>;
+          agents?: Array<{ name: string; emoji: string; systemPrompt: string; model: 'auto' | 'haiku' | 'sonnet'; isBuiltIn?: boolean; sharedMemories?: boolean }>;
+          mcp?: Array<{ name: string; command: string; args: string[]; enabled: boolean }>;
+        };
+        // Merge settings (keep apiKey-bearing concerns out — settings has no apiKey)
+        if (parsed.settings) {
+          updateSettings(parsed.settings);
+        }
+        // Add CUSTOM agents only — never overwrite built-ins
+        if (Array.isArray(parsed.agents)) {
+          for (const a of parsed.agents) {
+            if (a.isBuiltIn) continue;
+            createAgent({
+              name: a.name,
+              emoji: a.emoji,
+              systemPrompt: a.systemPrompt,
+              model: a.model,
+              sharedMemories: a.sharedMemories,
+            });
+          }
+        }
+        // Add MCP configs with empty env (user must re-fill secrets)
+        if (Array.isArray(parsed.mcp)) {
+          for (const c of parsed.mcp) {
+            mcp.addConfig({
+              name: c.name,
+              command: c.command,
+              args: c.args,
+              env: {},
+              enabled: false, // start disabled — env is empty, user reviews first
+            });
+          }
+        }
+        // Broadcast fresh state so UIs reflect the import
+        mascotWin?.webContents.send('agents:changed', getActiveAgent());
+        mascotWin?.webContents.send('settings:changed', getSettings());
+        settingsWin?.webContents.send('settings:changed', getSettings());
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'import failed' };
+      }
+    },
+    'hotkey:test': (combo) => {
+      try {
+        // Empty / obviously invalid accelerators fail registration too.
+        if (!combo || combo.trim().length === 0) return { ok: false, reason: 'invalid' };
+        const inUse = isAcceleratorInUse(combo);
+        // The current hotkey IS registered by us — that's not a conflict.
+        if (inUse && combo !== getSettings().hotkey) {
+          return { ok: false, reason: 'in-use' };
+        }
+        return { ok: true };
+      } catch {
+        return { ok: false, reason: 'invalid' };
+      }
+    },
     'tts:synthesize': ({ text, voice }) => synthesize(text, voice),
     'tts:voices': () => getVoices(),
+    'tts:preview': async ({ voice }) => {
+      // Pull a localized one-liner so the preview matches the chosen voice's
+      // language reasonably (the voice may not match the UI locale, but it's
+      // the cleanest default we can give without a per-voice phrase table).
+      const phrase = translate(getSettings().locale, 'settings.ttsPreviewPhrase');
+      return synthesize(phrase, voice);
+    },
     'keyboard:read-selection': async () => {
       console.log('[main] read-selection invoked, lastFg:', getLastForegroundHwnd());
       mascotWin?.blur();

@@ -245,3 +245,47 @@ export function clearMemoriesForAgent(agentId: string): void {
   agents[idx].memories = [];
   agentsStore.set('agents', agents);
 }
+
+/**
+ * Returns memories grouped by agent. For built-ins, names/emoji come from
+ * the current i18n locale; for custom, from the stored fields. Includes all
+ * agents — even ones with empty memory lists, so callers can filter as needed.
+ */
+export function listAllMemoriesByAgent(): Array<{ agentId: string; name: string; emoji: string; memories: string[] }> {
+  const all = listAgents();
+  return all.map((a) => ({
+    agentId: a.id,
+    name: a.name,
+    emoji: a.emoji,
+    memories: a.memories,
+  }));
+}
+
+/**
+ * Duplicate a built-in agent into a new custom agent. The new agent inherits
+ * the built-in's CURRENT (localized) name + prompt + emoji + model, but is
+ * persisted verbatim — so it won't relocalize when the user switches UI lang.
+ * Returns null if the source isn't a known built-in.
+ */
+export function duplicateBuiltIn(agentId: string): Agent | null {
+  const agents = listAgents();
+  const source = agents.find((a) => a.id === agentId && a.isBuiltIn);
+  if (!source) return null;
+  // Pull the localized name/prompt from the current snapshot; the "(cópia)"
+  // suffix is chosen language-agnostically — short, recognizable.
+  const localeSuffix = (() => {
+    try {
+      const loc = currentLocale();
+      if (loc === 'pt') return ' (cópia)';
+      if (loc === 'es') return ' (copia)';
+      return ' (copy)';
+    } catch { return ' (copy)'; }
+  })();
+  return createAgent({
+    name: source.name + localeSuffix,
+    emoji: source.emoji,
+    systemPrompt: source.systemPrompt,
+    model: source.model,
+    sharedMemories: source.sharedMemories,
+  });
+}

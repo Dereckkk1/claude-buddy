@@ -21,6 +21,9 @@ export interface AppSettings {
   soundsEnabled: boolean;
   soundsVolume: number;
   locale: Locale;
+  // When true (default), agent responds in the language of the user's most
+  // recent message. When false, always responds in the UI locale.
+  respondInUserLanguage: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -34,6 +37,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundsEnabled: true,
   soundsVolume: 0.1,
   locale: 'en',
+  respondInUserLanguage: true,
 };
 
 const encryptionKey = machineIdSync(true).slice(0, 32);

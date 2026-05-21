@@ -98,6 +98,16 @@ function AgentEditor({ initial, onCancel, onSaved }: EditorProps) {
     onSaved();
   };
 
+  const duplicate = async () => {
+    if (!initial || !initial.isBuiltIn) return;
+    const created = await invoke('agents:duplicate-builtin', initial.id);
+    if (created) {
+      // Refresh the list so the new agent shows; AgentsTab re-renders and the
+      // user can pick the duplicate from the list to edit it further.
+      onSaved();
+    }
+  };
+
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
@@ -169,14 +179,17 @@ function AgentEditor({ initial, onCancel, onSaved }: EditorProps) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
-        <div>
+        <div style={{ display: 'flex', gap: 8 }}>
           {initial && !isBuiltIn && (
             <button className="danger-btn" onClick={remove}>{t('settings.agents.delete')}</button>
+          )}
+          {initial && isBuiltIn && (
+            <button className="cb-btn-ghost-settings" onClick={duplicate}>{t('settings.agents.duplicateAsCustom')}</button>
           )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="cb-btn-ghost-settings" onClick={onCancel}>{t('settings.agents.cancel')}</button>
-          <button className="cb-btn-primary" onClick={save} disabled={saving}>
+          <button className="cb-btn-primary" onClick={save} disabled={saving || isBuiltIn}>
             {saving ? t('settings.agents.saving') : t('settings.agents.save')}
           </button>
         </div>

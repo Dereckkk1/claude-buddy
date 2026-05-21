@@ -172,7 +172,18 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 .agent-selector-trigger:hover { background: var(--bg-ghost-hover); }
 .agent-selector-trigger > span:first-child { font-size: 13px; line-height: 1; }
 .agent-selector-name { font-weight: 500; letter-spacing: -0.01em; }
-.agent-selector-caret { opacity: 0.55; font-size: 9px; }
+.agent-selector-caret { opacity: 0.55; font-size: 9px; transition: opacity 200ms; }
+/* Subtle nudge during the first few sessions so new users notice the
+   agent switcher exists. Stops after settings.wakeCount > 2. */
+.agent-selector-caret.pulse {
+  animation: agent-caret-pulse 1.8s ease-in-out infinite;
+  color: var(--clay);
+  opacity: 0.9;
+}
+@keyframes agent-caret-pulse {
+  0%, 100% { transform: translateY(0); opacity: 0.55; }
+  50%      { transform: translateY(1px); opacity: 1; }
+}
 .agent-selector-menu {
   position: absolute;
   bottom: calc(100% + 4px);

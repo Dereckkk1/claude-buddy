@@ -302,7 +302,24 @@ export default function App() {
               {!lastAssistant && (
                 <span className="bubble-greeting" title={greeting}>{greeting}</span>
               )}
-              <AgentSelector active={activeAgent} onChange={(a) => { setActiveAgent(a); refreshMemoriesCache(); }} />
+              <AgentSelector
+                active={activeAgent}
+                hasActiveConversation={conv.messages.length > 0}
+                onResetConversation={() => conv.reset()}
+                onChange={(a) => {
+                  // When mid-conversation, append a switch marker to the most
+                  // recent assistant message so the visual break is obvious.
+                  // If there's no assistant message yet, the switch is silent —
+                  // the new agent's first reply is itself the marker.
+                  const msgs = useConversation.getState().messages;
+                  const hasAssistant = msgs.some((m) => m.role === 'assistant');
+                  if (hasAssistant) {
+                    conv.appendAssistantChunk(`\n\n*${t('agents.switchedTo', { agent: a.name })}*\n\n`);
+                  }
+                  setActiveAgent(a);
+                  refreshMemoriesCache();
+                }}
+              />
             </>
           }
         >

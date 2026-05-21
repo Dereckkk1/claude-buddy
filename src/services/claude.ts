@@ -79,8 +79,14 @@ function mcpHintBlock(toolCount: number, serverNames: string[]): string {
   return `\n\nMCP TOOLS DISPONÍVEIS: ${toolCount} tools de servers conectados (${serverNames.join(', ')}).\n\nElas aparecem na lista de tools com prefixo <server>_<tool>. USE PROATIVAMENTE quando relevante — NUNCA diga "não tenho acesso a X" sem tentar a tool primeiro. Se o user pergunta algo que parece bater com uma tool MCP, tenta chamá-la. Pra GitHub MCP especificamente: você pode descobrir o username do user via get_me (ou similar) — não pergunte antes de tentar.`;
 }
 
-function languageDirective(locale: Locale): string {
-  return translate(locale, 'systemPrompt.respondInLanguage');
+function languageDirective(locale: Locale, respondInUserLanguage: boolean): string {
+  // When the user opts out, fall back to the strict locale prompt that pins
+  // the response language to the UI locale; otherwise use the "match the
+  // user's last message" variant (the new default).
+  const key = respondInUserLanguage
+    ? 'systemPrompt.respondInLanguage'
+    : 'systemPrompt.respondInLocale';
+  return translate(locale, key, { locale });
 }
 
 function modelForAgent(agent: AgentDTO, messages: Message[], attachments: Attachment[]): string {
@@ -158,10 +164,16 @@ export async function chatWithSkills(
   const locale = getLocale();
   const mcpTools = getMCPTools();
   const mcpServerNames = Array.from(new Set(mcpTools.map((t) => t.serverName)));
+  // Read once for this turn — avoids an extra round trip on each call.
+  let respondInUserLanguage = true;
+  try {
+    const settings = await invoke('settings:get');
+    respondInUserLanguage = settings.respondInUserLanguage ?? true;
+  } catch { /* default to true */ }
   const system = [
     buildToolInstructions(locale),
     '---',
-    languageDirective(locale),
+    languageDirective(locale, respondInUserLanguage),
     '---',
     agent.systemPrompt,
     memoriesBlock(agent.memories, locale),

@@ -8,6 +8,7 @@ export interface AgentDTO {
     isBuiltIn: boolean;
     sharedMemories?: boolean;
 }
+export type Locale = 'en' | 'pt' | 'es';
 export interface AppSettingsDTO {
     autostart: boolean;
     idleTimeoutMs: number;
@@ -18,13 +19,52 @@ export interface AppSettingsDTO {
     theme: 'light' | 'dark' | 'auto';
     soundsEnabled: boolean;
     soundsVolume: number;
+    locale: Locale;
+    respondInUserLanguage: boolean;
+}
+export interface AgentMemoriesGroupDTO {
+    agentId: string;
+    name: string;
+    emoji: string;
+    memories: string[];
+}
+export interface SettingsExportDTO {
+    version: string;
+    exportedAt: number;
+    settings: AppSettingsDTO;
+    agents: Array<{
+        id: string;
+        name: string;
+        emoji: string;
+        systemPrompt: string;
+        model: 'auto' | 'haiku' | 'sonnet';
+        memories: string[];
+        isBuiltIn: boolean;
+        sharedMemories?: boolean;
+    }>;
+    mcp: Array<{
+        name: string;
+        command: string;
+        args: string[];
+        enabled: boolean;
+    }>;
+}
+export interface MCPTestResultDTO {
+    ok: boolean;
+    error?: string;
+    tools?: string[];
 }
 export interface IpcRequests {
     'config:get-api-key': () => string | null;
     'config:set-api-key': (key: string) => void;
     'memories:list': () => string[];
+    'memories:list-all': () => AgentMemoriesGroupDTO[];
     'memories:add': (fact: string) => void;
     'memories:delete': (index: number) => void;
+    'memories:delete-by-index': (params: {
+        agentId: string;
+        index: number;
+    }) => void;
     'memories:clear': () => void;
     'agents:list': () => AgentDTO[];
     'agents:get-active': () => AgentDTO;
@@ -35,9 +75,23 @@ export interface IpcRequests {
         patch: Partial<Omit<AgentDTO, 'id' | 'isBuiltIn'>>;
     }) => AgentDTO | null;
     'agents:delete': (id: string) => void;
+    'agents:duplicate-builtin': (agentId: string) => AgentDTO | null;
     'settings:get': () => AppSettingsDTO;
     'settings:update': (patch: Partial<AppSettingsDTO>) => AppSettingsDTO;
     'settings:open': () => void;
+    'settings:export': () => {
+        ok: boolean;
+        path?: string;
+        error?: string;
+    };
+    'settings:import': () => {
+        ok: boolean;
+        error?: string;
+    };
+    'hotkey:test': (combo: string) => {
+        ok: boolean;
+        reason?: 'in-use' | 'invalid';
+    };
     'tts:synthesize': (params: {
         text: string;
         voice: string;
@@ -47,6 +101,10 @@ export interface IpcRequests {
         id: string;
         label: string;
     }[];
+    'tts:preview': (params: {
+        voice: string;
+        rate: number;
+    }) => string;
     'position:get': () => {
         x: number;
         y: number;
@@ -129,6 +187,71 @@ export interface IpcRequests {
         mimeType: string;
         base64: string;
     } | null;
+    'files:list-folder': (params: {
+        path: string;
+        recursive?: boolean;
+    }) => {
+        ok: true;
+        listing: import('../electron/files').FolderListing;
+    } | {
+        ok: false;
+        error: string;
+    };
+    'files:read-file': (params: {
+        path: string;
+    }) => {
+        ok: true;
+        content: import('../electron/files').FileContent;
+    } | {
+        ok: false;
+        error: string;
+    };
+    'files:set-scope': (paths: string[]) => void;
+    'files:pick-folder': () => {
+        path: string;
+        name: string;
+        size: number;
+    } | null;
+    'files:resolve-dropped': (paths: string[]) => Array<{
+        path: string;
+        kind: 'file' | 'folder';
+        name: string;
+        size: number;
+    }>;
+    'shell:run-command': (params: {
+        command: string;
+        cwd?: string;
+        timeoutMs?: number;
+    }) => {
+        ok: true;
+        result: import('../electron/shell').RunResult;
+    } | {
+        ok: false;
+        error: string;
+    };
+    'mcp:list-configs': () => import('./mcp-types').MCPServerConfig[];
+    'mcp:add-config': (input: Omit<import('./mcp-types').MCPServerConfig, 'id' | 'prefix'>) => import('./mcp-types').MCPServerConfig;
+    'mcp:update-config': (params: {
+        id: string;
+        patch: Partial<Omit<import('./mcp-types').MCPServerConfig, 'id'>>;
+    }) => import('./mcp-types').MCPServerConfig | null;
+    'mcp:delete-config': (id: string) => void;
+    'mcp:import-json': (rawJson: string) => {
+        added: number;
+        errors: string[];
+    };
+    'mcp:list-states': () => import('./mcp-types').MCPServerState[];
+    'mcp:restart-server': (id: string) => Promise<void>;
+    'mcp:list-tools': () => import('./mcp-types').MCPToolDef[];
+    'mcp:call-tool': (params: {
+        prefixedName: string;
+        input: Record<string, unknown>;
+    }) => import('./mcp-types').MCPCallToolResult;
+    'mcp:test': (config: Omit<import('./mcp-types').MCPServerConfig, 'id' | 'prefix'>) => MCPTestResultDTO;
+    'mcp:get-stderr': (id: string) => {
+        errorMessage?: string;
+        stderr?: string;
+    };
 }
 export interface IpcEvents {
     'hotkey:activate': void;
