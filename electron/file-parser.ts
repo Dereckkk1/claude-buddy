@@ -1,11 +1,22 @@
 import { dialog } from 'electron';
-import { promises as fs } from 'node:fs';
+import { promises as fs, Stats } from 'node:fs';
 import path from 'node:path';
 
+// `parseFile` and `pickAndParseFile` now also surface a structured error so
+// the renderer can show a localized "too large / bad type" toast instead of
+// silently swallowing the failure. The renderer's IPC signature accepts
+// either the parsed shape or null; we map `{ error }` to null in main.ts
+// AFTER emitting an `attach:error` event with the i18n code.
+type ParseError = { error: string };
 type ParsedAttachment =
   | { kind: 'text'; content: string }
   | { kind: 'image'; mimeType: string; base64: string }
+  | ParseError
   | null;
+
+export function isParseError(p: ParsedAttachment): p is ParseError {
+  return !!p && typeof p === 'object' && 'error' in p;
+}
 
 const TEXT_EXTS = ['.txt', '.md', '.json', '.csv', '.log', '.yaml', '.yml', '.xml', '.html', '.css', '.js', '.ts', '.tsx', '.jsx', '.py', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.rb', '.php', '.sh', '.ps1', '.sql'];
 const IMAGE_EXTS: Record<string, string> = {
@@ -15,6 +26,35 @@ const IMAGE_EXTS: Record<string, string> = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
 };
+
+// Per-type byte caps for the user-picked attach flow. Keep tight so we don't
+// blow up the request payload when serialized as base64 / inlined text.
+// The renderer maps these error codes to i18n strings — keep the literals
+// in sync with `attach.imageTooLarge` etc.
+export const ATTACH_SIZE_CAPS = {
+  image: 5 * 1024 * 1024,    //  5 MB
+  pdf:   30 * 1024 * 1024,   // 30 MB
+  docx:  15 * 1024 * 1024,   // 15 MB
+  text:  5 * 1024 * 1024,    //  5 MB (generic text/code fallback)
+} as const;
+
+export function validateFileSize(stat: Stats, ext: string): { ok: true } | { ok: false; code: string } {
+  const lower = ext.toLowerCase();
+  if (lower in IMAGE_EXTS) {
+    if (stat.size > ATTACH_SIZE_CAPS.image) return { ok: false, code: 'attach.imageTooLarge' };
+    return { ok: true };
+  }
+  if (lower === '.pdf') {
+    if (stat.size > ATTACH_SIZE_CAPS.pdf) return { ok: false, code: 'attach.pdfTooLarge' };
+    return { ok: true };
+  }
+  if (lower === '.docx') {
+    if (stat.size > ATTACH_SIZE_CAPS.docx) return { ok: false, code: 'attach.docxTooLarge' };
+    return { ok: true };
+  }
+  if (stat.size > ATTACH_SIZE_CAPS.text) return { ok: false, code: 'attach.fileTooLarge' };
+  return { ok: true };
+}
 
 export async function pickAndParseFile(): Promise<ParsedAttachment> {
   const result = await dialog.showOpenDialog({
@@ -37,6 +77,15 @@ export async function pickAndParseFile(): Promise<ParsedAttachment> {
 export async function parseFile(filePath: string): Promise<ParsedAttachment> {
   const ext = path.extname(filePath).toLowerCase();
   const fileName = path.basename(filePath);
+
+  // Size cap — fail fast BEFORE any read so a 4GB PDF doesn't get buffered.
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (!stat) return null;
+  const validation = validateFileSize(stat, ext);
+  if (!validation.ok) {
+    console.warn('[file-parser] size cap exceeded:', filePath, stat.size, validation.code);
+    return { error: validation.code };
+  }
 
   // Image
   if (ext in IMAGE_EXTS) {

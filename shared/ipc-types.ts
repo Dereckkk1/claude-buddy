@@ -113,15 +113,32 @@ export interface IpcRequests {
   'file:pick-and-parse': () =>
     | { kind: 'text'; content: string }
     | { kind: 'image'; mimeType: string; base64: string }
+    | { error: string }
     | null;
   'files:list-folder': (params: { path: string; recursive?: boolean }) =>
     { ok: true; listing: import('../electron/files').FolderListing } | { ok: false; error: string };
   'files:read-file': (params: { path: string }) =>
     { ok: true; content: import('../electron/files').FileContent } | { ok: false; error: string };
   'files:set-scope': (paths: string[]) => void;
-  'files:pick-folder': () => { path: string; name: string; size: number } | null;
+  'files:pick-folder': () => {
+    path: string;
+    name: string;
+    size: number;
+    entryCount?: number;
+    truncated?: boolean;
+    sensitive?: boolean;
+  } | null;
   'files:resolve-dropped': (paths: string[]) =>
-    Array<{ path: string; kind: 'file' | 'folder'; name: string; size: number }>;
+    Array<{
+      path: string;
+      kind: 'file' | 'folder';
+      name: string;
+      size: number;
+      entryCount?: number;
+      truncated?: boolean;
+    }>;
+  'files:read-image-as-attachment': (path: string) =>
+    { kind: 'image'; mimeType: string; base64: string } | null;
   'shell:run-command': (params: { command: string; cwd?: string; timeoutMs?: number }) =>
     { ok: true; result: import('../electron/shell').RunResult } | { ok: false; error: string };
 

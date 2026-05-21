@@ -280,15 +280,37 @@ export default function App() {
           .map((f) => (window as unknown as { fileBridge: { getPathForFile: (file: File) => string } }).fileBridge.getPathForFile(f))
           .filter(Boolean);
         if (!paths.length) return;
-        const resolved = await invoke('files:resolve-dropped', paths);
+        let resolved = await invoke('files:resolve-dropped', paths);
+        // [P1-1] Cap many-file drops behind a confirmation so a rogue 5000-file
+        // drag doesn't silently fill the scope. Native confirm() is sync and
+        // good enough for this rare interaction; modal would be overkill.
+        if (resolved.length > 20) {
+          const ok = window.confirm(t('attach.confirmMany', { n: resolved.length }));
+          if (!ok) resolved = resolved.slice(0, 20);
+        }
         for (const r of resolved) {
+          // [P0-2] Small images dropped from the OS shell should land as an
+          // inline base64 attachment (visible NOW, sent with this message)
+          // rather than a path scope. Keeps the "drop a screenshot to ask
+          // about it" flow one-step. Fallback to path scope for big/odd
+          // images so we don't blow the per-message token budget.
+          const isImageFile =
+            r.kind === 'file' && /\.(png|jpe?g|gif|webp)$/i.test(r.name);
+          if (isImageFile && r.size < 5 * 1024 * 1024) {
+            const att = await invoke('files:read-image-as-attachment', r.path);
+            if (att) {
+              conv.addAttachment(att);
+              continue;
+            }
+            // fall through to path scope if the read failed for any reason
+          }
           conv.addAttachedPath({ id: crypto.randomUUID(), ...r });
         }
       }}
     >
       {isDraggingOver && (
         <div className="cb-drop-overlay">
-          <div className="cb-drop-overlay-inner">{t('attach.dropHere')}</div>
+          <div className="cb-drop-overlay-inner">{t('attach.dropHereRich')}</div>
         </div>
       )}
       {state !== 'sleeping' && agentRunning && (
@@ -358,8 +380,19 @@ export default function App() {
               </div>
             </>
           )}
+          {/* [P0-1] When BOTH ephemeral attachments and persistent paths exist,
+              label each group so the user knows what's one-shot vs sticky.
+              Single-group case stays unlabeled — the distinction only matters
+              when both are present at once. */}
           {showInput && conv.attachments.length > 0 && (
             <div style={{ marginTop: 6 }}>
+              {conv.attachedPaths.length > 0 && (
+                <div style={{
+                  fontSize: 10, color: 'var(--ink-soft)', marginBottom: 4,
+                }}>
+                  {t('attach.ephemeralHeader')}
+                </div>
+              )}
               {conv.attachments.map((a, i) => (
                 <AttachmentChip key={i} attachment={a} onRemove={() => conv.removeAttachment(i)} />
               ))}
@@ -367,6 +400,13 @@ export default function App() {
           )}
           {showInput && conv.attachedPaths.length > 0 && (
             <div style={{ marginTop: 6 }}>
+              {conv.attachments.length > 0 && (
+                <div style={{
+                  fontSize: 10, color: 'var(--ink-soft)', marginBottom: 4,
+                }}>
+                  {t('attach.persistentHeader')}
+                </div>
+              )}
               {conv.attachedPaths.map((p) => (
                 <AttachmentChip key={p.id} attachedPath={p} onRemove={() => conv.removeAttachedPath(p.id)} />
               ))}

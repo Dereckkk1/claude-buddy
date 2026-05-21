@@ -1,6 +1,11 @@
 import { BrowserWindow, desktopCapturer, screen, ipcMain } from 'electron';
+import { translate } from '../shared/i18n-strings';
+import { getSettings } from './store';
 
 export async function captureScreenRegion(): Promise<{ mimeType: string; base64: string } | null> {
+  // Localized "ESC to cancel — drag to select" hint, baked into the overlay
+  // HTML at render time. Settings already carry the user's locale.
+  const escHint = translate(getSettings().locale, 'capture.escHint');
   const display = screen.getPrimaryDisplay();
   const { width, height } = display.size;
 
@@ -23,6 +28,7 @@ export async function captureScreenRegion(): Promise<{ mimeType: string; base64:
     <html>
     <body style="margin:0;cursor:crosshair;background:rgba(0,0,0,0.3);overflow:hidden">
       <img id="bg" src="${fullDataUrl}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.35;pointer-events:none">
+      <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);padding:6px 14px;background:rgba(0,0,0,0.6);color:#fff;font-family:system-ui,sans-serif;font-size:13px;border-radius:6px;pointer-events:none;z-index:10">${escHint.replace(/"/g, '&quot;')}</div>
       <div id="sel" style="position:absolute;border:2px solid #ff6b35;background:rgba(255,107,53,0.15);display:none"></div>
       <script>
         const { ipcRenderer } = require('electron');

@@ -17,6 +17,12 @@ export interface AttachedPath {
   kind: 'file' | 'folder';
   name: string;
   size: number;
+  // Folder-only — populated by main when the user attaches a directory.
+  // Counts visible entries (post IGNORE_PATTERNS + .gitignore filtering)
+  // so the chip can show "📁 src · 1247 arquivos". `truncated` flips when
+  // we hit the 5000-entry hard cap during the pre-count walk.
+  entryCount?: number;
+  truncated?: boolean;
 }
 
 interface ConversationState {
