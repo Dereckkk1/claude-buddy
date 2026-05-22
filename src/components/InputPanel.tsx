@@ -4,6 +4,26 @@ import { useT } from '@/i18n';
 import { useSpeechToText } from '@/hooks/useSpeechToText';
 import type { Locale } from '@shared/ipc-types';
 
+const ICON_PROPS = {
+  width: 16,
+  height: 16,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.8,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+const PlusIcon = () => (
+  <svg {...ICON_PROPS}><path d="M12 5v14M5 12h14"/></svg>
+);
+const MicIcon = () => (
+  <svg {...ICON_PROPS}><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>
+);
+const ArrowUpIcon = () => (
+  <svg {...ICON_PROPS} width="18" height="18" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+);
+
 interface Props {
   onSubmit: (text: string) => void;
   onAttach: () => void;
@@ -203,10 +223,10 @@ export function InputPanel({
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+      <div className="cb-composer">
         <input
           ref={inputRef}
-          className="cb-input"
+          className="cb-composer-input"
           placeholder={agentMode ? t('input.placeholderAgent') : t('input.placeholder')}
           value={text}
           onChange={(e) => { setText(e.target.value); setHistoryIdx(-1); }}
@@ -214,48 +234,52 @@ export function InputPanel({
           disabled={disabled}
           autoFocus
         />
-        <button
-          className="cb-btn-send"
-          onClick={handleSubmit}
-          disabled={disabled || !text.trim()}
-          aria-label={t('input.send')}
-          title={t('input.send')}
-        >↑</button>
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            className="cb-btn cb-btn-ghost"
-            onClick={onAttach}
-            disabled={disabled}
-            title={t('input.attachTitle')}
-          >＋ {t('input.attach')}</button>
-          {stt.supported && (
+        <div className="cb-composer-actions">
+          <div className="cb-composer-actions-left">
             <button
-              className={stt.listening ? 'cb-btn cb-btn-primary' : 'cb-btn cb-btn-ghost'}
-              onClick={stt.toggle}
+              className="cb-icon-btn"
+              onClick={onAttach}
               disabled={disabled}
-              title={stt.listening ? t('input.voiceListening') : t('input.voice')}
-              aria-pressed={stt.listening}
-            >🎤 {stt.listening ? t('input.voiceListening') : t('input.voice')}</button>
-          )}
+              aria-label={t('input.attachTitle')}
+              title={t('input.attachTitle')}
+            ><PlusIcon /></button>
+          </div>
+          <div className="cb-composer-actions-right">
+            <button
+              className={`cb-agent-toggle${agentMode ? ' is-on' : ''}`}
+              onClick={onToggleAgent}
+              disabled={disabled}
+              aria-pressed={agentMode}
+              title={t('input.agentModeTitle')}
+            >
+              <img
+                src={buddyIcon}
+                alt=""
+                width={14}
+                height={18}
+                style={{ imageRendering: 'pixelated', display: 'block' }}
+              />
+              <span>{t('input.agentMode')}</span>
+            </button>
+            {stt.supported && (
+              <button
+                className={`cb-icon-btn${stt.listening ? ' is-active' : ''}`}
+                onClick={stt.toggle}
+                disabled={disabled}
+                title={stt.listening ? t('input.voiceListening') : t('input.voice')}
+                aria-pressed={stt.listening}
+                aria-label={t('input.voice')}
+              ><MicIcon /></button>
+            )}
+            <button
+              className="cb-btn-send"
+              onClick={handleSubmit}
+              disabled={disabled || !text.trim()}
+              aria-label={t('input.send')}
+              title={t('input.send')}
+            ><ArrowUpIcon /></button>
+          </div>
         </div>
-        <button
-          className={agentMode ? 'cb-btn cb-btn-primary' : 'cb-btn cb-btn-ghost'}
-          onClick={onToggleAgent}
-          disabled={disabled}
-          title={t('input.agentModeTitle')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-        >
-          <img
-            src={buddyIcon}
-            alt=""
-            width={18}
-            height={24}
-            style={{ imageRendering: 'pixelated', display: 'block' }}
-          />
-          {t('input.agentMode')} {agentMode ? '✓' : ''}
-        </button>
       </div>
     </div>
   );

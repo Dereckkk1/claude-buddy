@@ -135,7 +135,13 @@ export interface StreamCallbacks {
   /** Fires each time a web_search server-tool call is initiated (1-based count). */
   onWebSearchUse?: (count: number) => void;
   /** Fires once at the end of the turn with cumulative usage from finalMessage. */
-  onUsage?: (usage: { inputTokens: number; outputTokens: number; model: string }) => void;
+  onUsage?: (usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    model: string;
+  }) => void;
   /** Optional abort signal — passed through to the SDK's `messages.stream`. */
   signal?: AbortSignal;
   /** Fires once when extended thinking is activated for this turn. */
@@ -224,7 +230,11 @@ export async function chatWithSkills(
     const settings = await invoke('settings:get');
     respondInUserLanguage = settings.respondInUserLanguage ?? true;
   } catch { /* default to true */ }
-  const system = [
+  // Prompt caching: split into a stable prefix (cached) + a volatile suffix.
+  // The cache_control on the stable block also caches `tools` (renders first).
+  // Volatile pieces (activeApp, attachedPaths) go after the breakpoint so they
+  // don't invalidate the prefix on every turn.
+  const stableSystemText = [
     buildToolInstructions(locale),
     '---',
     languageDirective(locale, respondInUserLanguage),
@@ -232,10 +242,21 @@ export async function chatWithSkills(
     agent.systemPrompt,
     userNameBlock(options.userName ?? ''),
     memoriesBlock(agent.memories, locale),
+    mcpHintBlock(mcpTools.length, mcpServerNames),
+  ].filter(Boolean).join('\n\n');
+  const volatileSystemText = [
     attachedPathsBlock(attachedPaths),
     activeAppBlock(activeApp),
-    mcpHintBlock(mcpTools.length, mcpServerNames),
-  ].join('\n\n');
+  ].filter(Boolean).join('\n\n');
+  // Local type — SDK 0.30.1 doesn't surface cache_control on TextBlockParam,
+  // but the GA API has accepted it since prompt caching went GA in 2024.
+  type SystemTextBlock = { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } };
+  const system: SystemTextBlock[] = [
+    { type: 'text', text: stableSystemText, cache_control: { type: 'ephemeral' } },
+  ];
+  if (volatileSystemText.trim()) {
+    system.push({ type: 'text', text: volatileSystemText });
+  }
 
   // Web-search citations accumulated across all loop iterations for this turn.
   // Rendered at the very end as a "Fontes:" block appended via onChunk.
@@ -243,6 +264,8 @@ export async function chatWithSkills(
   let webSearchCount = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let totalCacheReadTokens = 0;
+  let totalCacheCreationTokens = 0;
 
   // Only Sonnet really benefits from extended thinking — Haiku doesn't expose
   // it the same way and the extra budget would be wasted.
@@ -261,11 +284,15 @@ export async function chatWithSkills(
       // Merge native tools + web_search (server-side) + any MCP tools that
       // are currently advertised by running servers. Reusing mcpTools from
       // the outer scope so we don't list the cache twice per request.
-      const mcpToolDefs = mcpTools.map((t) => ({
-        name: t.prefixedName,
-        description: t.description,
-        input_schema: t.inputSchema,
-      }));
+      // Sort MCP tools by name so the rendered `tools` array is deterministic
+      // — otherwise reorderings invalidate the prompt cache.
+      const mcpToolDefs = mcpTools
+        .map((t) => ({
+          name: t.prefixedName,
+          description: t.description,
+          input_schema: t.inputSchema,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
       // Extended thinking requires max_tokens > budget_tokens; bump it on the
       // thinking path so the model actually has room to think AND respond.
       const streamParams: Record<string, unknown> = {
@@ -349,10 +376,14 @@ export async function chatWithSkills(
       if (final.usage) {
         totalInputTokens += final.usage.input_tokens ?? 0;
         totalOutputTokens += final.usage.output_tokens ?? 0;
+        // SDK 0.30.1's Usage type omits the cache fields — API still returns them.
+        const u = final.usage as { cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+        totalCacheReadTokens += u.cache_read_input_tokens ?? 0;
+        totalCacheCreationTokens += u.cache_creation_input_tokens ?? 0;
       }
 
       if (toolUses.length === 0 || final.stop_reason === 'end_turn') {
-        emitCitationsAndUsage(callbacks, citationsForTurn, totalInputTokens, totalOutputTokens, model);
+        emitCitationsAndUsage(callbacks, citationsForTurn, totalInputTokens, totalOutputTokens, totalCacheReadTokens, totalCacheCreationTokens, model);
         return;
       }
 
@@ -409,7 +440,7 @@ export async function chatWithSkills(
       throw new Error('UNKNOWN');
     }
   }
-  emitCitationsAndUsage(callbacks, citationsForTurn, totalInputTokens, totalOutputTokens, model);
+  emitCitationsAndUsage(callbacks, citationsForTurn, totalInputTokens, totalOutputTokens, totalCacheReadTokens, totalCacheCreationTokens, model);
 }
 
 function emitCitationsAndUsage(
@@ -417,6 +448,8 @@ function emitCitationsAndUsage(
   citations: Array<{ url: string; title: string }>,
   inputTokens: number,
   outputTokens: number,
+  cacheReadInputTokens: number,
+  cacheCreationInputTokens: number,
   model: string,
 ): void {
   // De-dup citations by URL (preserve insertion order).
@@ -431,7 +464,7 @@ function emitCitationsAndUsage(
     const lines = unique.map((c, i) => `${i + 1}. [${c.title}](${c.url})`).join('\n');
     callbacks.onChunk(`\n\n**Fontes:**\n${lines}\n`);
   }
-  if (inputTokens > 0 || outputTokens > 0) {
-    callbacks.onUsage?.({ inputTokens, outputTokens, model });
+  if (inputTokens > 0 || outputTokens > 0 || cacheReadInputTokens > 0 || cacheCreationInputTokens > 0) {
+    callbacks.onUsage?.({ inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens, model });
   }
 }

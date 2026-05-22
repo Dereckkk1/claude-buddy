@@ -28,7 +28,7 @@ import {
   addMemoryToAgent, deleteMemoryFromAgent, clearMemoriesForAgent,
   listAllMemoriesByAgent, duplicateBuiltIn,
 } from './agents';
-import { captureScreenRegion } from './capture';
+import { captureScreenRegion, captureActiveWindowImage } from './capture';
 import { readClipboard } from './clipboard-watcher';
 import { pasteToActiveWindow, captureActiveWindow, registerOwnHwnd, getLastForegroundHwnd, copyFromActiveWindow, getActiveApp } from './keyboard';
 import {
@@ -289,6 +289,21 @@ function bootstrap() {
       const result = await captureScreenRegion();
       mascotWin?.show();
       return result;
+    },
+    // Autonomous capture of the user's active window (the foreground window
+    // before Buddy stole focus). No overlay; consent is gated renderer-side
+    // via the screen-consent bridge before this is called.
+    'capture:active-window': async () => {
+      const hwnd = getLastForegroundHwnd();
+      // Hide the mascot briefly so its window can't appear in the crop if the
+      // user moved it over the target window.
+      mascotWin?.hide();
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        return await captureActiveWindowImage(hwnd);
+      } finally {
+        mascotWin?.show();
+      }
     },
     'clipboard:read': () => readClipboard(),
     'agent:screen-size': () => getScreenSize(),

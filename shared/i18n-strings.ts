@@ -142,12 +142,21 @@ export const EN = {
     save_memory_undo: 'remembered: "{fact}"',
     web_search: '🔍 searching the web',
     screenshot: 'took a screenshot',
+    view_screen: 'peeked at your window',
     attached_image: 'read the image',
     attached_file: 'read the file',
     list_folder: 'listed folder',
     read_file: 'read file',
     run_command: 'ran command',
     detailsToggle: 'details',
+  },
+
+  // Screen-view consent modal (one-time per session)
+  screenConsent: {
+    title: 'Let me see your screen?',
+    body: 'I want to take a quick screenshot of your active window to understand what you\'re looking at. You can revoke this any time — it lasts only until I go to sleep.',
+    allow: 'Allow this session',
+    deny: 'Not now',
   },
 
   // Shell command approval card
@@ -194,7 +203,7 @@ export const EN = {
     play: '▶ play',
     stop: '◼ stop',
     close: 'close',
-    manageAgents: '＋ Manage agents…',
+    manageAgents: 'Manage agents…',
     customTag: 'custom',
     export: 'export as markdown',
     exportDone: 'copied ✓',
@@ -624,12 +633,20 @@ export const PT: StringDict = {
     save_memory_undo: 'lembrei: "{fact}"',
     web_search: '🔍 buscando na web',
     screenshot: 'tirou print da tela',
+    view_screen: 'deu uma olhada na sua janela',
     attached_image: 'leu a imagem',
     attached_file: 'leu o arquivo',
     list_folder: 'listou a pasta',
     read_file: 'leu o arquivo',
     run_command: 'rodou comando',
     detailsToggle: 'detalhes',
+  },
+
+  screenConsent: {
+    title: 'Posso ver sua tela?',
+    body: 'Quero tirar um print rapinho da sua janela ativa pra entender o que você tá olhando. Você pode revogar quando quiser — vale só até eu dormir.',
+    allow: 'Liberar nesta sessão',
+    deny: 'Agora não',
   },
 
   shell: {
@@ -673,7 +690,7 @@ export const PT: StringDict = {
     play: '▶ reproduzir',
     stop: '◼ parar',
     close: 'fechar',
-    manageAgents: '＋ Gerenciar agentes…',
+    manageAgents: 'Gerenciar agentes…',
     customTag: 'custom',
     export: 'exportar como markdown',
     exportDone: 'copiado ✓',
@@ -1089,12 +1106,20 @@ export const ES: StringDict = {
     save_memory_undo: 'recordé: "{fact}"',
     web_search: '🔍 buscando en la web',
     screenshot: 'sacó una captura',
+    view_screen: 'le echó un vistazo a tu ventana',
     attached_image: 'leyó la imagen',
     attached_file: 'leyó el archivo',
     list_folder: 'listó la carpeta',
     read_file: 'leyó el archivo',
     run_command: 'ejecutó comando',
     detailsToggle: 'detalles',
+  },
+
+  screenConsent: {
+    title: '¿Puedo ver tu pantalla?',
+    body: 'Quiero sacar una captura rápida de tu ventana activa para entender lo que estás mirando. Podés revocarlo cuando quieras — dura solo hasta que me duerma.',
+    allow: 'Permitir en esta sesión',
+    deny: 'Ahora no',
   },
 
   shell: {
@@ -1138,7 +1163,7 @@ export const ES: StringDict = {
     play: '▶ reproducir',
     stop: '◼ parar',
     close: 'cerrar',
-    manageAgents: '＋ Gestionar agentes…',
+    manageAgents: 'Gestionar agentes…',
     customTag: 'custom',
     export: 'exportar como markdown',
     exportDone: 'copiado ✓',

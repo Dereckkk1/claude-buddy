@@ -1,6 +1,104 @@
 import { BrowserWindow, desktopCapturer, screen, ipcMain } from 'electron';
+import { exec } from 'node:child_process';
 import { translate } from '../shared/i18n-strings';
 import { getSettings } from './store';
+
+// Runs a PowerShell script via -EncodedCommand. Mirrors the local helper in
+// keyboard.ts — kept here to avoid a circular import.
+function runPS(script: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    exec(
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
+      { windowsHide: true },
+      (err, stdout, stderr) => {
+        if (err) {
+          console.error('[capture] PS error:', err.message, 'stderr:', stderr);
+          reject(err);
+        } else {
+          resolve(stdout.trim());
+        }
+      }
+    );
+  });
+}
+
+async function getWindowRect(hwnd: string): Promise<{ left: number; top: number; right: number; bottom: number } | null> {
+  // GetWindowRect needs the RECT struct — Add-Type -MemberDefinition can't
+  // declare nested types, so we marshal 16 bytes (4 ints) directly via
+  // AllocHGlobal and unpack into an int[]. Cached as a PSTypeName so repeated
+  // calls don't recompile the helper.
+  const script = `
+if (-not ([System.Management.Automation.PSTypeName]'CBCap.Win').Type) {
+  Add-Type -Namespace CBCap -Name Win -MemberDefinition @'
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint="GetWindowRect")]
+    public static extern bool GetWindowRectRaw(System.IntPtr hWnd, System.IntPtr lpRect);
+    public static int[] GetRect(System.IntPtr hWnd) {
+      System.IntPtr p = System.Runtime.InteropServices.Marshal.AllocHGlobal(16);
+      GetWindowRectRaw(hWnd, p);
+      int[] r = new int[4];
+      System.Runtime.InteropServices.Marshal.Copy(p, r, 0, 4);
+      System.Runtime.InteropServices.Marshal.FreeHGlobal(p);
+      return r;
+    }
+'@
+}
+$h = [System.IntPtr]::new([int64]${hwnd})
+$r = [CBCap.Win]::GetRect($h)
+Write-Output ("L=" + $r[0] + "|T=" + $r[1] + "|R=" + $r[2] + "|B=" + $r[3])
+  `;
+  try {
+    const out = await runPS(script);
+    const m = out.match(/L=(-?\d+)\|T=(-?\d+)\|R=(-?\d+)\|B=(-?\d+)/);
+    if (!m) return null;
+    return {
+      left: parseInt(m[1], 10),
+      top: parseInt(m[2], 10),
+      right: parseInt(m[3], 10),
+      bottom: parseInt(m[4], 10),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function captureActiveWindowImage(
+  hwnd: string | null
+): Promise<{ mimeType: string; base64: string } | null> {
+  if (!hwnd || hwnd === '0') return null;
+  const rect = await getWindowRect(hwnd);
+  if (!rect) return null;
+  const winW = rect.right - rect.left;
+  const winH = rect.bottom - rect.top;
+  if (winW < 10 || winH < 10) return null;
+
+  // Pick the display containing the window's center — supports multi-monitor.
+  const centerX = rect.left + Math.floor(winW / 2);
+  const centerY = rect.top + Math.floor(winH / 2);
+  const target = screen.getDisplayNearestPoint({ x: centerX, y: centerY });
+
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: target.size.width, height: target.size.height },
+  });
+  // display_id comes back stringified; fall back to the first source if no
+  // direct match (single-screen path).
+  const thumb =
+    sources.find((s) => s.display_id === String(target.id))?.thumbnail
+    ?? sources[0]?.thumbnail;
+  if (!thumb) return null;
+
+  const offsetX = rect.left - target.bounds.x;
+  const offsetY = rect.top - target.bounds.y;
+  const cropX = Math.max(0, offsetX);
+  const cropY = Math.max(0, offsetY);
+  const cropW = Math.min(target.size.width - cropX, Math.max(1, winW));
+  const cropH = Math.min(target.size.height - cropY, Math.max(1, winH));
+  if (cropW < 10 || cropH < 10) return null;
+
+  const cropped = thumb.crop({ x: cropX, y: cropY, width: cropW, height: cropH });
+  return { mimeType: 'image/png', base64: cropped.toPNG().toString('base64') };
+}
 
 export async function captureScreenRegion(): Promise<{ mimeType: string; base64: string } | null> {
   // Localized "ESC to cancel — drag to select" hint, baked into the overlay

@@ -123,6 +123,10 @@ export interface IpcRequests {
         mimeType: string;
         base64: string;
     } | null;
+    'capture:active-window': () => {
+        mimeType: string;
+        base64: string;
+    } | null;
     'clipboard:read': () => {
         kind: 'text';
         content: string;

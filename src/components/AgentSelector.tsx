@@ -70,29 +70,49 @@ export function AgentSelector({ active, onChange, hasActiveConversation, onReset
         onClick={() => setOpen((v) => !v)}
         title={t('agents.switchTooltip')}
       >
-        <span>{active.emoji}</span>
+        <span className="agent-selector-emoji">{active.emoji}</span>
         <span className="agent-selector-name">{active.name}</span>
-        <span className={`agent-selector-caret${pulseHint ? ' pulse' : ''}`}>▾</span>
+        <svg
+          className={`agent-selector-caret${pulseHint ? ' pulse' : ''}`}
+          width="10" height="10" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+        ><path d="m6 9 6 6 6-6"/></svg>
       </button>
       {open && (
         <div className="agent-selector-menu">
-          {agents.map((a) => (
-            <button
-              key={a.id}
-              className={`agent-selector-item ${a.id === active.id ? 'active' : ''}`}
-              onClick={() => handlePick(a)}
-            >
-              <span>{a.emoji}</span>
-              <span>{a.name}</span>
-              {a.isBuiltIn ? null : <span className="agent-selector-tag">{t('bubble.customTag')}</span>}
-            </button>
-          ))}
+          {agents.map((a) => {
+            const isActive = a.id === active.id;
+            return (
+              <button
+                key={a.id}
+                className={`agent-selector-item${isActive ? ' is-active' : ''}`}
+                onClick={() => handlePick(a)}
+              >
+                <span className="agent-selector-emoji">{a.emoji}</span>
+                <span className="agent-selector-label">{a.name}</span>
+                {!a.isBuiltIn && (
+                  <span className="agent-selector-tag">{t('bubble.customTag')}</span>
+                )}
+                {isActive && (
+                  <svg
+                    className="agent-selector-check"
+                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+                  ><path d="M20 6 9 17l-5-5"/></svg>
+                )}
+              </button>
+            );
+          })}
           <div className="agent-selector-sep" />
           <button
             className="agent-selector-item agent-selector-manage"
             onClick={async () => { await invoke('settings:open'); setOpen(false); }}
           >
-            {t('bubble.manageAgents')}
+            <svg
+              width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+            ><path d="M12 5v14M5 12h14"/></svg>
+            <span className="agent-selector-label">{t('bubble.manageAgents')}</span>
           </button>
         </div>
       )}

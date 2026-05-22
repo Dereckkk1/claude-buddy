@@ -153,47 +153,52 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 /* Quando não tem greeting, o selector vai pra direita sozinho */
 .bubble-header > .agent-selector { margin-left: auto; }
 
-/* Agent selector — Anthropic-style minimal */
+/* Agent selector — Anthropic-style dropdown */
 .agent-selector { position: relative; display: inline-flex; flex-shrink: 0; margin-left: auto; }
 .agent-selector-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-ghost);
+  background: transparent;
   border: none;
-  padding: 5px 10px;
-  border-radius: 10px;
+  padding: 4px 8px;
+  border-radius: 999px;
   font-size: 12px;
   font-family: inherit;
   color: var(--ink);
   cursor: pointer;
   transition: background 120ms;
 }
-.agent-selector-trigger:hover { background: var(--bg-ghost-hover); }
-.agent-selector-trigger > span:first-child { font-size: 13px; line-height: 1; }
+.agent-selector-trigger:hover { background: var(--bg-ghost); }
+.agent-selector-emoji { font-size: 13px; line-height: 1; display: inline-flex; align-items: center; }
 .agent-selector-name { font-weight: 500; letter-spacing: -0.01em; }
-.agent-selector-caret { opacity: 0.55; font-size: 9px; transition: opacity 200ms; }
+.agent-selector-caret {
+  color: var(--ink-soft);
+  transition: color 200ms, transform 200ms;
+  display: inline-block;
+}
+.agent-selector-trigger:hover .agent-selector-caret { color: var(--ink); }
 /* Subtle nudge during the first few sessions so new users notice the
    agent switcher exists. Stops after settings.wakeCount > 2. */
 .agent-selector-caret.pulse {
   animation: agent-caret-pulse 1.8s ease-in-out infinite;
   color: var(--clay);
-  opacity: 0.9;
 }
 @keyframes agent-caret-pulse {
-  0%, 100% { transform: translateY(0); opacity: 0.55; }
+  0%, 100% { transform: translateY(0); opacity: 0.6; }
   50%      { transform: translateY(1px); opacity: 1; }
 }
+
 .agent-selector-menu {
   position: absolute;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% + 6px);
   left: 0;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 -6px 20px rgba(0,0,0,0.12);
-  padding: 4px;
-  min-width: 200px;
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(20,20,19,0.12);
+  padding: 6px;
+  min-width: 220px;
   z-index: 100;
   animation: bubble-in 140ms cubic-bezier(0.34, 1.56, 0.64, 1);
   transform-origin: bottom left;
@@ -201,30 +206,39 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 .agent-selector-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   background: transparent;
   border: none;
-  padding: 7px 9px;
-  border-radius: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
+  font-weight: 400;
   color: var(--ink);
   text-align: left;
+  line-height: 1.2;
+  transition: background 100ms;
 }
-.agent-selector-item:hover { background: var(--bg-ghost-hover); }
-.agent-selector-item.active { background: var(--clay-soft); color: var(--clay-dark); font-weight: 600; }
+.agent-selector-item:hover { background: var(--bg-ghost); }
+.agent-selector-item.is-active { font-weight: 500; }
+.agent-selector-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-selector-check { color: var(--clay); flex-shrink: 0; }
 .agent-selector-tag {
-  margin-left: auto;
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 500;
   background: var(--bg-ghost);
-  padding: 1px 5px;
-  border-radius: 4px;
   color: var(--ink-soft);
+  padding: 2px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
 }
-.agent-selector-sep { height: 1px; background: var(--border); margin: 4px 6px; }
-.agent-selector-manage { color: var(--clay); font-weight: 500; }
+.agent-selector-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+.agent-selector-manage { color: var(--ink-soft); }
+.agent-selector-manage:hover { color: var(--ink); }
+.agent-selector-manage svg { flex-shrink: 0; }
 .bubble-close {
   position: absolute;
   top: 8px; right: 10px;
@@ -243,7 +257,7 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Input */
+/* Input — legacy single-line input (kept for compatibility) */
 .cb-input {
   flex: 1;
   padding: 8px 10px;
@@ -261,6 +275,92 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
   box-shadow: 0 0 0 3px var(--clay-soft);
 }
 .cb-input::placeholder { color: var(--ink-soft); opacity: 0.6; }
+
+/* Composer — Anthropic-style unified input shell */
+.cb-composer {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg-elevated);
+  padding: 10px 12px 8px;
+  margin-top: 6px;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.cb-composer:focus-within {
+  border-color: var(--clay);
+  box-shadow: 0 0 0 3px var(--clay-soft);
+}
+.cb-composer-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 4px 2px 8px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--ink);
+}
+.cb-composer-input::placeholder { color: var(--ink-soft); opacity: 0.7; }
+.cb-composer-input:disabled { opacity: 0.5; }
+
+.cb-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.cb-composer-actions-left,
+.cb-composer-actions-right {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+/* Icon-only ghost button used inside the composer */
+.cb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  transition: background 100ms, color 100ms;
+}
+.cb-icon-btn:hover:not(:disabled) { background: var(--bg-ghost); color: var(--ink); }
+.cb-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cb-icon-btn.is-active {
+  background: var(--clay-soft);
+  color: var(--clay-dark);
+}
+
+/* Agent-mode chip toggle — sits next to the model-picker-style cluster */
+.cb-agent-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms, color 100ms;
+}
+.cb-agent-toggle:hover:not(:disabled) { background: var(--bg-ghost); color: var(--ink); }
+.cb-agent-toggle:disabled { opacity: 0.4; cursor: not-allowed; }
+.cb-agent-toggle.is-on {
+  background: var(--clay-soft);
+  color: var(--clay-dark);
+}
 
 /* Buttons */
 .cb-btn {
@@ -302,22 +402,25 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 .cb-btn-send {
   background: var(--clay);
   color: #fff;
-  width: 32px; height: 32px;
-  border-radius: 10px;
+  width: 28px; height: 28px;
+  border-radius: 8px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  font-weight: 600;
   line-height: 1;
   border: none;
   cursor: pointer;
   font-family: inherit;
+  margin-left: 4px;
   transition: background 120ms;
 }
 .cb-btn-send:hover:not(:disabled) { background: var(--clay-dark); }
-.cb-btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
+.cb-btn-send:disabled {
+  background: var(--bg-ghost);
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
 
 /* Chip */
 .cb-chip {
@@ -451,7 +554,7 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 .cb-markdown th { background: var(--bg-ghost); font-weight: 600; }
 .cb-markdown hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
 
-/* Attach picker */
+/* Attach picker — Claude-style construction, Buddy palette */
 .attach-picker {
   position: absolute;
   right: calc(100% + 12px);
@@ -468,10 +571,10 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 }
 .attach-option {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 9px 10px;
   background: transparent;
   border: none;
   border-radius: 8px;
@@ -483,14 +586,26 @@ h1, h2, h3, h4, h5, h6, .bubble-title {
 }
 .attach-option:hover { background: rgba(204, 120, 92, 0.08); }
 .attach-option-icon {
-  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--clay);
-  width: 24px;
-  text-align: center;
-  font-family: Georgia, serif;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
 }
-.attach-option-title { font-weight: 600; font-size: 13px; }
-.attach-option-sub { font-size: 11px; color: var(--ink-soft); margin-top: 1px; }
+.attach-option-body { min-width: 0; flex: 1; }
+.attach-option-title { font-weight: 600; font-size: 13px; line-height: 1.2; }
+.attach-option-sub {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Agent overlay */
 .agent-overlay {

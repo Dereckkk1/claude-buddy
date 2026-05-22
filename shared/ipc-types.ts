@@ -97,6 +97,7 @@ export interface IpcRequests {
   'position:get': () => { x: number; y: number } | null;
   'position:set': (pos: { x: number; y: number }) => void;
   'capture:screen-region': () => { mimeType: string; base64: string } | null;
+  'capture:active-window': () => { mimeType: string; base64: string } | null;
   'clipboard:read': () =>
     | { kind: 'text'; content: string }
     | { kind: 'image'; mimeType: string; base64: string }

@@ -9,6 +9,11 @@ import { AgentOverlay } from './components/AgentOverlay';
 import { AgentSelector } from './components/AgentSelector';
 import { CommandApprovalCard } from './components/CommandApprovalCard';
 import { usePendingApprovals, resolveApproval, clearAllApprovals } from './services/run-command-bridge';
+import {
+  subscribeScreenConsent,
+  clearScreenConsent,
+  type PendingConsent,
+} from './services/screen-consent-bridge';
 import type { AgentDTO } from '@shared/ipc-types';
 import { useConversation } from './state/conversation';
 import { chatWithSkills } from './services/claude';
@@ -64,12 +69,16 @@ export default function App() {
   const [pendingPreflight, setPendingPreflight] = useState<
     null | { goal: string; resolve: (ok: boolean) => void }
   >(null);
+  // view_screen tool's one-time-per-session consent. Bridge fires on the first
+  // call; once accepted, subsequent shots run silent until sleep clears it.
+  const [pendingScreenConsent, setPendingScreenConsent] = useState<PendingConsent | null>(null);
   const [agentStep, setAgentStep] = useState<{ count: number; max: number } | null>(null);
   const [agentLostHint, setAgentLostHint] = useState<string | null>(null);
   const [webSearchUses, setWebSearchUses] = useState(0);
   const [sessionUsage, setSessionUsage] = useState<{
-    inputTokens: number; outputTokens: number; estCostUsd: number; lastModel: string | null;
-  }>({ inputTokens: 0, outputTokens: 0, estCostUsd: 0, lastModel: null });
+    inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number;
+    estCostUsd: number; cacheSavedUsd: number; lastModel: string | null;
+  }>({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, estCostUsd: 0, cacheSavedUsd: 0, lastModel: null });
   const [crashedMcp, setCrashedMcp] = useState<string[]>(() => getCrashedServers());
   // First-run / onboarding state.
   const [, setSeenIntro] = useState(true);
@@ -103,6 +112,9 @@ export default function App() {
   }, [state, agentRunning, showAttachPicker]);
 
   useEffect(() => { refreshMemoriesCache(); }, []);
+  // view_screen consent: subscribe once so the modal mounts when the bridge
+  // fires from skills.ts.
+  useEffect(() => subscribeScreenConsent(setPendingScreenConsent), []);
   // Keep the main-process scope guard in sync with the renderer's attached
   // paths so list_folder/read_file only ever touch what the user attached.
   useEffect(() => {
@@ -282,6 +294,9 @@ export default function App() {
     // Any pending shell-command approval cards get auto-cancelled — releases
     // the agent's tool call so it doesn't hang on the API side.
     clearAllApprovals();
+    // Screen-view consent is session-scoped — going to sleep revokes it so
+    // a fresh wake re-prompts the user.
+    clearScreenConsent();
   };
 
   const approvals = usePendingApprovals();
@@ -601,18 +616,29 @@ export default function App() {
         },
         onModelPicked: (m) => setModelLabel(m.includes('sonnet') ? 'sonnet' : 'haiku'),
         onWebSearchUse: (count) => setWebSearchUses(count),
-        onUsage: ({ inputTokens, outputTokens, model }) => {
-          // Estimate cost with hardcoded per-Mtok rates.
+        onUsage: ({ inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens, model }) => {
+          // Estimate cost with hardcoded per-Mtok rates. Cache reads are ~0.1× input rate;
+          // cache writes are ~1.25× (default 5-min TTL). Savings = what the cached portion
+          // would have cost at full input price minus what we actually paid for read+write.
           const rates = model.includes('sonnet')
             ? { inUsdPerMtok: 3, outUsdPerMtok: 15 }
             : { inUsdPerMtok: 1, outUsdPerMtok: 5 };
+          const inRate = rates.inUsdPerMtok / 1_000_000;
           const turnCost =
-            (inputTokens / 1_000_000) * rates.inUsdPerMtok +
+            inputTokens * inRate +
+            cacheReadInputTokens * inRate * 0.1 +
+            cacheCreationInputTokens * inRate * 1.25 +
             (outputTokens / 1_000_000) * rates.outUsdPerMtok;
+          const turnSavings =
+            cacheReadInputTokens * inRate * 0.9 -
+            cacheCreationInputTokens * inRate * 0.25;
           setSessionUsage((prev) => ({
             inputTokens: prev.inputTokens + inputTokens,
             outputTokens: prev.outputTokens + outputTokens,
+            cacheReadTokens: prev.cacheReadTokens + cacheReadInputTokens,
+            cacheCreationTokens: prev.cacheCreationTokens + cacheCreationInputTokens,
             estCostUsd: prev.estCostUsd + turnCost,
+            cacheSavedUsd: prev.cacheSavedUsd + turnSavings,
             lastModel: model,
           }));
         },
@@ -857,6 +883,29 @@ export default function App() {
           </div>
         </div>
       )}
+      {pendingScreenConsent && (
+        <div className="cb-modal-backdrop">
+          <div className="cb-modal">
+            <div className="cb-modal-title">{t('screenConsent.title')}</div>
+            <div className="cb-modal-body">{t('screenConsent.body')}</div>
+            <div className="cb-modal-actions">
+              <button
+                className="cb-btn cb-btn-secondary"
+                autoFocus
+                onClick={() => pendingScreenConsent.resolve(false)}
+              >
+                {t('screenConsent.deny')}
+              </button>
+              <button
+                className="cb-btn cb-btn-primary"
+                onClick={() => pendingScreenConsent.resolve(true)}
+              >
+                {t('screenConsent.allow')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {state !== 'sleeping' && !agentRunning && (
         <SpeechBubble
           onClose={sleep}
@@ -1015,8 +1064,11 @@ export default function App() {
                   >
                     ✦ {modelLabel}
                     {webSearchUses > 0 && ` · web ${webSearchUses}/3`}
-                    {sessionUsage.inputTokens + sessionUsage.outputTokens > 0 && (
-                      ` · ${formatTokens(sessionUsage.inputTokens + sessionUsage.outputTokens)} tok · $${sessionUsage.estCostUsd.toFixed(3)}`
+                    {sessionUsage.inputTokens + sessionUsage.outputTokens + sessionUsage.cacheReadTokens + sessionUsage.cacheCreationTokens > 0 && (
+                      ` · ${formatTokens(sessionUsage.inputTokens + sessionUsage.outputTokens + sessionUsage.cacheReadTokens + sessionUsage.cacheCreationTokens)} tok · $${sessionUsage.estCostUsd.toFixed(3)}`
+                    )}
+                    {sessionUsage.cacheSavedUsd > 0.001 && (
+                      ` · cached $${sessionUsage.cacheSavedUsd.toFixed(3)}`
                     )}
                   </div>
                 )}

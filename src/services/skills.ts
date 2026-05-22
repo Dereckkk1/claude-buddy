@@ -2,6 +2,7 @@
 import { invoke } from './ipc';
 import { useConversation } from '@/state/conversation';
 import { requestApproval, publishCardResult, registerAutoApprovedCard } from './run-command-bridge';
+import { requestScreenConsent } from './screen-consent-bridge';
 import { getMCPToolNames } from './mcp-tools-cache';
 
 export interface ToolDef {
@@ -64,6 +65,12 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['path'],
     },
+  },
+  {
+    name: 'view_screen',
+    description:
+      'Olha a JANELA ATIVA do usuário (em foco antes do Buddy) por iniciativa própria. Use proativamente sempre que ver a tela vai te dar contexto pra responder melhor — não espere o usuário pedir explicitamente, na maioria das vezes ele não vai pedir. Exemplos de quando vale a pena olhar: pergunta vaga ou sem contexto suficiente ("o que eu faço aqui?", "me ajuda", "isso tá certo?"), você não tem certeza do que ele tá fazendo, ele descreveu algo de forma ambígua, parece haver um erro/UI/código relevante na frente dele, ou simplesmente conferir antes de chutar. Prefira olhar a pedir esclarecimento — é mais rápido e útil. Na primeira chamada da sessão aparece um modal de permissão; depois é silencioso até o Buddy dormir. Retorna a imagem da janela pra você analisar.',
+    input_schema: { type: 'object', properties: {} },
   },
   {
     name: 'run_command',
@@ -195,6 +202,16 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         };
       }
       return { content: c.text };
+    }
+    case 'view_screen': {
+      const ok = await requestScreenConsent();
+      if (!ok) return { content: 'view_screen: user declined screen access' };
+      const shot = await invoke('capture:active-window');
+      if (!shot) return { content: 'view_screen: no active window to capture' };
+      return {
+        content: '[active window captured]',
+        imageResult: { base64: shot.base64, mimeType: shot.mimeType },
+      };
     }
     case 'run_command': {
       const command = String(input.command ?? '').trim();
